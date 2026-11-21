@@ -1,0 +1,7 @@
+# Never upload secrets or local build output to Vercel (env vars are set in the project settings).
+.env*
+node_modules
+.next
+.next-*
+e2e/out
+*.log
