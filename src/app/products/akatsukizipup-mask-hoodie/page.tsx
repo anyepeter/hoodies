@@ -1,25 +1,47 @@
 import type { Metadata } from "next";
 import { ProductMain } from "@/components/product/ProductMain";
-import { FaqSection, JoinSection, ProductQuestions, ReviewsTicker, SaleTicker, TestimonialsSection } from "@/components/sections/ProductSections";
+import { CtaBand, FaqSection, FeatureRows, JoinSection, ReviewsTicker, ReviewWall, SaleTicker } from "@/components/sections/ProductSections";
 import { HOODIE } from "@/lib/store";
 
-export const metadata: Metadata = { title: HOODIE.title };
+const description = "The zip-up hoodie with the Akatsuki red clouds and a built-in mask. Akatsuki or Shinobi, S to 2XL. Free worldwide shipping, 30-day returns.";
 
-// The hoodie page, section by section in the original's order. Its own route (not [handle]) so it is
-// fully static and opens instantly.
+export const metadata: Metadata = {
+  title: HOODIE.title,
+  description,
+  openGraph: { title: HOODIE.title, description, images: [{ url: HOODIE.images[0].src, width: 1600, height: 1600 }] },
+};
+
+// What Google reads to show the price and stock in search results.
+const productJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  name: HOODIE.title,
+  description,
+  image: HOODIE.images.slice(0, 4).map((i) => i.src),
+  brand: { "@type": "Brand", name: "AkatsukiZipUp" },
+  offers: {
+    "@type": "Offer",
+    priceCurrency: "EUR",
+    price: HOODIE.price.toFixed(2),
+    availability: "https://schema.org/InStock",
+    shippingDetails: { "@type": "OfferShippingDetails", shippingRate: { "@type": "MonetaryAmount", value: "0", currency: "EUR" } },
+  },
+};
+
 export default function HoodiePage() {
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
       <ProductMain />
-      <div className="mt-6">
-        <ProductQuestions />
+      <div className="mt-14">
+        <ReviewsTicker />
       </div>
-      <ReviewsTicker />
-      <JoinSection />
+      <FeatureRows />
       <SaleTicker />
+      <JoinSection />
+      <ReviewWall />
       <FaqSection />
-      <TestimonialsSection />
-      <div className="h-16" />
+      <CtaBand />
     </>
   );
 }

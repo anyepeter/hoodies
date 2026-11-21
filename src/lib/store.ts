@@ -121,6 +121,55 @@ export const FOOTER_LINKS = [
   { label: "Contact information", href: "/policies/contact-information" },
 ];
 
+// ---- Used by the improved version -------------------------------------------------------------------------
+
+/** From the store's size-guide image, in inches. */
+export const SIZE_CHART: { size: Size; chest: number; shoulder: number; sleeve: number; body: number }[] = [
+  { size: "S", chest: 44.09, shoulder: 22.83, sleeve: 22.83, body: 26.77 },
+  { size: "M", chest: 45.67, shoulder: 23.62, sleeve: 23.62, body: 27.56 },
+  { size: "L", chest: 48.82, shoulder: 25.2, sleeve: 25.2, body: 29.13 },
+  { size: "XL", chest: 51.97, shoulder: 26.77, sleeve: 26.77, body: 30.71 },
+  { size: "2XL", chest: 55.12, shoulder: 28.35, sleeve: 28.35, body: 32.28 },
+];
+
+/** Every review the store shows, in one list, for the review wall. */
+export const ALL_REVIEWS = [
+  ...TESTIMONIALS.map((t) => ({ title: t.title, text: t.text, name: t.name, avatar: t.avatar, image: t.image })),
+  ...TICKER_REVIEWS.map((r) => ({ title: "", text: r.text, name: r.name, avatar: r.avatar, image: "" })),
+  { title: "", text: PRODUCT_REVIEW.text, name: PRODUCT_REVIEW.name, avatar: PRODUCT_REVIEW.avatar, image: "" },
+];
+
+/** The three things that make the hoodie, told with the store's own words and photos. */
+export const FEATURES = [
+  {
+    kicker: "The mask",
+    title: "Zip it up. Or don't.",
+    text: "Leave the built-in mask unzipped for an open-face look, or zip it up to complete the full design.",
+    image: "/store/review-kass.webp",
+    alt: "Customer wearing the hoodie with the mask zipped up",
+  },
+  {
+    kicker: "The clouds",
+    title: "Red clouds, not a giant print.",
+    text: "Rep the most iconic clan in anime history. The red clouds. The mystery. The power.",
+    image: "/store/akatsuki-2.webp",
+    alt: "Akatsuki Mask Hoodie laid flat, showing the red clouds",
+  },
+  {
+    kicker: "Two styles",
+    title: "Akatsuki or Shinobi.",
+    text: "Pick the black hoodie with the red clouds, or the green-and-navy Shinobi vest look. Every pack lets you mix both.",
+    image: "/store/shinobi-front.webp",
+    alt: "Shinobi Mask Hoodie in green and navy",
+  },
+];
+
+export const PERKS = [
+  { title: "Free worldwide shipping", text: "Tracking number as soon as it ships" },
+  { title: "30-day returns", text: "Unused and in its original packaging" },
+  { title: "Ships in 1–3 days", text: "Arrives in 5–10 business days" },
+];
+
 /** The store prices in euros, written the way the original shows them: €57,95. */
 export function money(value: number): string {
   const [whole, cents] = value.toFixed(2).split(".");

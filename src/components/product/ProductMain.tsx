@@ -7,39 +7,49 @@ import { Stars } from "@/components/icons";
 import { PaymentIcons } from "@/components/PaymentIcons";
 import { DeliveryTimeline } from "@/components/product/DeliveryTimeline";
 import { Gallery } from "@/components/product/Gallery";
+import { Perks } from "@/components/product/Perks";
 import { SizeChart } from "@/components/product/SizeChart";
+import { flyToCart } from "@/lib/fly-to-cart";
 import {
   ADD_ONS,
   BUNDLES,
   HOODIE,
-  PRODUCT_REVIEW,
   RECENT_BUYERS,
   SIZES,
   STYLE_IMAGE,
   STYLES,
   money,
   type AddOnId,
+  type Bundle,
   type BundleId,
   type Size,
   type Style,
 } from "@/lib/store";
 
-type Choice = { style: Style; size: Size };
+type Choice = { style: Style; size: Size | null };
+
+const saving = (b: Bundle) => HOODIE.compareAt * b.qty - b.price;
 
 export function ProductMain() {
   const { add } = useCart();
   const [photo, setPhoto] = useState(0);
   const [bundleId, setBundleId] = useState<BundleId>("duo");
-  const [picks, setPicks] = useState<Choice[]>(Array.from({ length: 3 }, () => ({ style: "Akatsuki", size: "S" })));
-  // The original ticks every add-on in advance.
-  const [addOns, setAddOns] = useState<Set<AddOnId>>(new Set(ADD_ONS.map((a) => a.id)));
+  // No size is pre-chosen: the original defaults everyone to S, which is how wrong sizes get ordered.
+  const [choices, setChoices] = useState<Choice[]>(Array.from({ length: 3 }, () => ({ style: "Akatsuki", size: null })));
+  // Paid extras start unticked (the original pre-ticks all three; EU consumer law doesn't allow that).
+  const [addOns, setAddOns] = useState<Set<AddOnId>>(new Set());
+  const [missingSize, setMissingSize] = useState(false);
+  const [added, setAdded] = useState(false);
   const [showSticky, setShowSticky] = useState(false);
   const buyButton = useRef<HTMLButtonElement>(null);
+  const picker = useRef<HTMLDivElement>(null);
 
   const bundle = BUNDLES.find((b) => b.id === bundleId)!;
+  const chosen = choices.slice(0, bundle.qty);
+  const extras = ADD_ONS.filter((a) => addOns.has(a.id));
+  const total = bundle.price + extras.reduce((n, a) => n + a.price, 0);
 
-  // The bottom bar takes over once the real button has scrolled up out of sight. A scroll listener rather
-  // than an IntersectionObserver: jumping straight past the button (back-to-top) never "intersects" it.
+  // The bottom bar takes over once the real button has scrolled up out of sight.
   useEffect(() => {
     const el = buyButton.current;
     if (!el) return;
@@ -58,9 +68,10 @@ export function ProductMain() {
     };
   }, []);
 
-  const setPick = (i: number, change: Partial<Choice>) => {
-    setPicks((prev) => prev.map((p, j) => (j === i ? { ...p, ...change } : p)));
+  const choose = (i: number, change: Partial<Choice>) => {
+    setChoices((prev) => prev.map((c, j) => (j === i ? { ...c, ...change } : c)));
     if (change.style) setPhoto(HOODIE.images.findIndex((img) => img.style === change.style));
+    if (change.size) setMissingSize(false);
   };
 
   const toggleAddOn = (id: AddOnId) =>
@@ -71,190 +82,237 @@ export function ProductMain() {
       return next;
     });
 
-  const addToCart = () => {
-    const chosen = picks.slice(0, bundle.qty);
-    const detail = chosen.map((p) => `${p.style} / ${p.size}`).join(", ");
-    add([
-      {
-        key: `bundle:${bundle.id}:${detail}`,
-        title: bundle.qty === 1 ? HOODIE.title : `${HOODIE.title} - ${bundle.title}`,
-        detail,
-        image: STYLE_IMAGE[chosen[0].style],
-        price: bundle.price,
-        compareAt: HOODIE.compareAt * bundle.qty,
-      },
-      ...ADD_ONS.filter((a) => addOns.has(a.id)).map((a) => ({ key: `addon:${a.id}`, title: a.title, image: a.image, price: a.price })),
-    ]);
+  const addToCart = (from: HTMLElement | null) => {
+    if (chosen.some((c) => !c.size)) {
+      setMissingSize(true);
+      picker.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    const detail = chosen.map((c) => `${c.style} / ${c.size}`).join(", ");
+    const image = STYLE_IMAGE[chosen[0].style];
+    const flight = from ? flyToCart(from, image) : 0;
+    add(
+      [
+        {
+          key: `bundle:${bundle.id}:${detail}`,
+          title: bundle.qty === 1 ? HOODIE.title : `${HOODIE.title} · ${bundle.title}`,
+          detail,
+          image,
+          price: bundle.price,
+          compareAt: HOODIE.compareAt * bundle.qty,
+        },
+        ...extras.map((a) => ({ key: `addon:${a.id}`, title: a.title, image: a.image, price: a.price })),
+      ],
+      { openAfterMs: flight + 250 },
+    );
+    setAdded(true);
+    setTimeout(() => setAdded(false), 1800);
   };
 
   return (
     <>
-      <section className="mx-auto grid max-w-[1400px] gap-6 px-4 pt-4 md:grid-cols-2 md:gap-12 md:px-12 md:pt-10">
-        <div className="md:sticky md:top-28 md:self-start">
+      <section className="mx-auto grid max-w-[1400px] gap-6 px-4 pt-3 md:grid-cols-[1.1fr_1fr] md:gap-14 md:px-12 md:pt-8">
+        <div className="md:sticky md:top-24 md:self-start">
           <Gallery images={HOODIE.images} active={photo} onChange={setPhoto} />
         </div>
 
-        <div className="min-w-0">
-          <h1 className="text-[29px] font-bold leading-tight md:text-[36px]">{HOODIE.title}</h1>
-          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
-            <Stars className="h-3 w-3" />
-            <span>Rated 4.9/5 | by over 300 satisfied customers</span>
+        <div className="min-w-0 md:pt-2">
+          <a href="#reviews" className="inline-flex items-center gap-2 text-[12px] font-medium text-ink/70 transition hover:text-ink">
+            <Stars className="h-3.5 w-3.5" />
+            <span>
+              <b className="font-semibold text-ink">4.9/5</b> · over 300 satisfied customers
+            </span>
+          </a>
+          <h1 className="mt-2 text-balance text-[32px] font-bold leading-[1.05] tracking-tight md:text-[44px]">{HOODIE.title}</h1>
+
+          <p className="mt-3 flex items-baseline gap-3">
+            <span className="text-[26px] font-bold text-brand">{money(HOODIE.price)}</span>
+            <s className="text-[16px] text-ink/45">{money(HOODIE.compareAt)}</s>
+            <span className="rounded-md bg-brand/10 px-2 py-0.5 text-[12px] font-bold text-brand">Save 28%</span>
           </p>
 
-          <ul className="mt-4 space-y-2.5 text-[14px]">
+          <ul className="mt-4 grid gap-1.5 text-[14px] text-ink/80">
             {HOODIE.bullets.map((b) => (
               <li key={b}>{b}</li>
             ))}
           </ul>
 
-          <div className="mt-4 flex items-center">
-            <div className="flex -space-x-2.5">
+          <div className="mt-4 flex items-center gap-3">
+            <div className="flex -space-x-2">
               {RECENT_BUYERS.map((src) => (
-                <span key={src} className="relative">
-                  <Image src={src} alt="" width={36} height={36} className="h-9 w-9 rounded-full border-2 border-white object-cover" />
-                  <span className="absolute -left-0.5 -top-0.5 grid h-3.5 w-3.5 place-items-center rounded-full bg-brand text-[8px] text-white">✓</span>
-                </span>
+                <Image key={src} src={src} alt="" width={32} height={32} className="h-8 w-8 rounded-full object-cover ring-2 ring-white" />
               ))}
             </div>
-            <span className="-ml-1 rounded-r-full rounded-l-md bg-brand py-1 pl-4 pr-4 leading-tight text-white">
-              <span className="block text-[13px] font-bold">87+ orders</span>
-              <span className="block text-[10px]">in the last 24h</span>
-            </span>
+            <p className="text-[13px] text-ink/70">
+              <span className="relative mr-1.5 inline-flex h-2 w-2 align-middle">
+                <span className="absolute inset-0 animate-ping rounded-full bg-brand/60" />
+                <span className="relative h-2 w-2 rounded-full bg-brand" />
+              </span>
+              <b className="font-semibold text-ink">87+ orders</b> in the last 24h
+            </p>
           </div>
 
-          <div className="mt-4">
+          {/* Bundles */}
+          <div className="mt-7 flex items-end justify-between">
+            <h2 className="text-[15px] font-bold">Bundle &amp; save</h2>
             <SizeChart />
           </div>
 
-          <div className="mt-4 flex items-center gap-3 text-[12px] font-bold">
-            <span className="h-px flex-1 bg-ink/40" />
-            BUNDLE &amp; SAVE
-            <span className="h-px flex-1 bg-ink/40" />
-          </div>
-
-          <div className="mt-3 space-y-3" role="radiogroup" aria-label="Bundle">
+          <div ref={picker} className="mt-3 space-y-2.5" role="radiogroup" aria-label="Bundle">
             {BUNDLES.map((b) => {
               const on = b.id === bundleId;
               return (
                 <div
                   key={b.id}
-                  className={`relative rounded-lg border transition-colors ${on ? "border-2 border-brand" : "border-black/15 hover:border-black/30"}`}
+                  className={`relative rounded-2xl border-2 transition-[border-color,background-color,box-shadow] duration-300 ${
+                    on ? "border-brand bg-brand/[0.03] shadow-[0_10px_30px_-18px_rgba(167,3,23,0.6)]" : "border-black/10 hover:border-black/25"
+                  }`}
                 >
-                  {b.ribbon && (
-                    <span className="ribbon absolute -top-2.5 right-3 bg-brand px-3 py-0.5 text-[10px] font-bold text-white">{b.ribbon}</span>
-                  )}
-                  {b.sticker && (
-                    <span className="sticker absolute -right-2 -top-4 z-10 rotate-[8deg] rounded-full bg-brand px-3 py-1 text-center font-script text-[15px] leading-[0.9] text-white shadow">
-                      Most
-                      <br />
-                      Popular
+                  {(b.sticker || b.ribbon) && (
+                    <span className={`absolute -top-2.5 right-4 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${b.sticker ? "bg-brand text-white" : "bg-ink text-white"}`}>
+                      {b.sticker ?? "Best value"}
                     </span>
                   )}
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    onClick={() => setBundleId(b.id)}
-                    className="flex w-full items-center gap-3 px-3 py-3 text-left"
-                  >
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 ${on ? "border-brand" : "border-ink/40"}`}>
-                      {on && <span className="h-2.5 w-2.5 rounded-full bg-brand" />}
+                  <button type="button" role="radio" aria-checked={on} onClick={() => setBundleId(b.id)} className="flex w-full items-center gap-3 p-4 text-left">
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition-colors ${on ? "border-brand" : "border-ink/30"}`}>
+                      <span className={`h-2.5 w-2.5 rounded-full bg-brand transition-transform duration-300 ${on ? "scale-100" : "scale-0"}`} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="text-[17px] font-bold">{b.title}</span>
-                        <span className="rounded bg-brand px-1.5 py-0.5 text-[9px] font-bold text-white">FREE SHIPPING</span>
+                      <span className="block text-[16px] font-bold leading-tight">{b.title}</span>
+                      <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink/60">
+                        <span className="rounded-md bg-brand/10 px-1.5 py-px font-semibold text-brand">Save {money(saving(b))}</span>
+                        {b.qty > 1 && <span className="whitespace-nowrap">{money(b.price / b.qty)} each</span>}
                       </span>
-                      <span className="block text-[12px] italic text-ink/75">{b.saving}</span>
                     </span>
-                    <span className="text-[17px] font-bold">{money(b.price)}</span>
+                    <span className="text-right">
+                      <span className="block text-[17px] font-bold leading-tight">{money(b.price)}</span>
+                      <s className="block text-[12px] text-ink/40">{money(HOODIE.compareAt * b.qty)}</s>
+                    </span>
                   </button>
 
-                  {on && (
-                    <div className="pb-1">
-                      <p className="px-3 text-[10px] font-semibold text-ink/75">Style, Size</p>
-                      <div className="space-y-2 px-3 pb-3 pt-1">
-                        {picks.slice(0, b.qty).map((p, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <Image src={STYLE_IMAGE[p.style]} alt="" width={36} height={36} className="h-9 w-9 rounded object-cover" />
-                            <select
-                              aria-label={`Style for hoodie ${i + 1}`}
-                              value={p.style}
-                              onChange={(e) => setPick(i, { style: e.target.value as Style })}
-                              className="select h-8 rounded border border-black/20 bg-white pl-2 pr-6 text-[13px]"
-                            >
-                              {STYLES.map((s) => (
-                                <option key={s}>{s}</option>
-                              ))}
-                            </select>
-                            <select
-                              aria-label={`Size for hoodie ${i + 1}`}
-                              value={p.size}
-                              onChange={(e) => setPick(i, { size: e.target.value as Size })}
-                              className="select h-8 rounded border border-black/20 bg-white pl-2 pr-6 text-[13px]"
-                            >
-                              {SIZES.map((s) => (
-                                <option key={s}>{s}</option>
-                              ))}
-                            </select>
-                          </div>
-                        ))}
+                  <div inert={!on} className={`grid transition-[grid-template-rows] duration-500 ease-[cubic-bezier(.2,.8,.2,1)] ${on ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                    <div className="overflow-hidden">
+                      <div className="space-y-4 border-t border-brand/10 px-4 pb-4 pt-3">
+                        {choices.slice(0, b.qty).map((c, i) => (
+                            <fieldset key={i} className="min-w-0 space-y-2">
+                              <legend className="mb-2 text-[12px] font-semibold text-ink/60">
+                                {b.qty > 1 ? `Hoodie ${i + 1}` : "Your hoodie"} · <span className="text-ink">{c.style}</span>
+                                {c.size && <span className="text-ink">, {c.size}</span>}
+                              </legend>
+                              <div className="flex gap-2">
+                                {STYLES.map((s) => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    aria-pressed={c.style === s}
+                                    onClick={() => choose(i, { style: s })}
+                                    className={`flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-[13px] font-medium transition ${
+                                      c.style === s ? "border-ink bg-ink text-white" : "border-black/15 hover:border-black/40"
+                                    }`}
+                                  >
+                                    <Image src={STYLE_IMAGE[s]} alt="" width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
+                                    {s}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="grid grid-cols-5 gap-1.5">
+                                {SIZES.map((s) => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    aria-pressed={c.size === s}
+                                    aria-label={`Size ${s} for hoodie ${i + 1}`}
+                                    onClick={() => choose(i, { size: s })}
+                                    className={`h-10 rounded-xl border text-[13px] font-semibold transition active:scale-95 ${
+                                      c.size === s
+                                        ? "border-brand bg-brand text-white"
+                                        : missingSize && !c.size
+                                          ? "border-brand/50 bg-white text-ink"
+                                          : "border-black/15 bg-white hover:border-black/40"
+                                    }`}
+                                  >
+                                    {s}
+                                  </button>
+                                ))}
+                              </div>
+                            </fieldset>
+                          ))}
+                        {missingSize && on && (
+                          <p className="text-[13px] font-semibold text-brand" role="alert">
+                            Pick a size for {bundle.qty > 1 ? "each hoodie" : "your hoodie"} first.
+                          </p>
+                        )}
                       </div>
-                      <ul className="divide-y divide-brand/15 overflow-hidden rounded-b-md bg-brand/15">
-                        {ADD_ONS.map((a) => (
-                          <li key={a.id}>
-                            <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5">
-                              <input type="checkbox" checked={addOns.has(a.id)} onChange={() => toggleAddOn(a.id)} className="check" />
-                              <Image src={a.image} alt="" width={28} height={28} className="h-7 w-7 rounded bg-white object-contain" />
-                              <span className="flex-1 text-[12px] font-bold">{a.label}</span>
-                              <span className="text-[12px] font-bold">{money(a.price)}</span>
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}
           </div>
 
-          <button ref={buyButton} type="button" onClick={addToCart} className="btn-brand mt-5 h-[50px] w-full text-[18px] uppercase tracking-wide">
-            Add to cart
+          {/* Opt-in extras */}
+          <fieldset className="mt-5 min-w-0">
+            <legend className="text-[13px] font-bold">Add to your order</legend>
+            <div className="mt-2 grid grid-cols-1 gap-2">
+              {ADD_ONS.map((a) => {
+                const on = addOns.has(a.id);
+                return (
+                  <label
+                    key={a.id}
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border p-2.5 pr-3 transition ${on ? "border-brand bg-brand/[0.04]" : "border-black/10 hover:border-black/25"}`}
+                  >
+                    <input type="checkbox" checked={on} onChange={() => toggleAddOn(a.id)} className="check" />
+                    <Image src={a.image} alt="" width={36} height={36} className="h-9 w-9 rounded-lg bg-soft object-contain p-1" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-semibold">{a.title}</span>
+                      <span className="block truncate text-[11px] text-ink/55">{a.description}</span>
+                    </span>
+                    <span className="text-[13px] font-semibold">+{money(a.price)}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <button
+            ref={buyButton}
+            type="button"
+            onClick={(e) => addToCart(e.currentTarget)}
+            className="btn-brand group relative mt-5 h-14 w-full overflow-hidden rounded-2xl text-[16px] shadow-[0_14px_30px_-14px_rgba(167,3,23,0.8)]"
+          >
+            <span className={`flex items-center gap-2 transition-all duration-300 ${added ? "-translate-y-8 opacity-0" : ""}`}>
+              Add to cart <span className="opacity-60">·</span> {money(total)}
+            </span>
+            <span className={`absolute inset-0 grid place-items-center transition-all duration-300 ${added ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`} aria-hidden={!added}>
+              Added to your cart ✓
+            </span>
+            <span className="shine" aria-hidden />
           </button>
 
+          <Perks className="mt-5" />
           <PaymentIcons className="mt-5" />
 
-          <div className="mt-7">
+          <div className="mt-7 rounded-2xl bg-soft px-4 py-5">
             <DeliveryTimeline />
           </div>
-
-          <figure className="mt-7 flex gap-3">
-            <Image src={PRODUCT_REVIEW.avatar} alt="" width={48} height={48} className="h-12 w-12 shrink-0 rounded-full object-cover" />
-            <div className="flex-1 border-b border-black/10 pb-3">
-              <blockquote className="text-[14px] leading-snug">{PRODUCT_REVIEW.text}</blockquote>
-              <figcaption className="mt-1 flex items-center gap-2 text-[12px] italic text-ink/60">
-                {PRODUCT_REVIEW.name} <Stars className="h-3 w-3" />
-              </figcaption>
-            </div>
-          </figure>
         </div>
       </section>
 
       {/* Sticky add-to-cart bar */}
       <div
-        className={`fixed inset-x-0 bottom-0 z-30 border-t border-black/10 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.08)] transition-[translate,visibility] duration-300 ${showSticky ? "visible translate-y-0" : "invisible translate-y-full"}`}
-        aria-hidden={!showSticky}
+        className={`fixed inset-x-0 bottom-0 z-30 border-t border-black/5 bg-white/90 shadow-[0_-8px_30px_-12px_rgba(18,18,18,0.25)] backdrop-blur-xl transition-[translate,visibility] duration-500 ease-[cubic-bezier(.2,.8,.2,1)] ${
+          showSticky ? "visible translate-y-0" : "invisible translate-y-full"
+        }`}
       >
-        <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3 md:px-12">
-          <Image src={STYLE_IMAGE.Akatsuki} alt="" width={48} height={48} className="hidden h-12 w-12 rounded-md object-cover md:block" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-bold">{HOODIE.title}</p>
-            <p className="text-[14px]">
-              <span className="font-bold text-brand">{money(HOODIE.price)}</span> <s className="font-semibold text-ink/60">{money(HOODIE.compareAt)}</s>
+        <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-12">
+          <Image src={STYLE_IMAGE[chosen[0].style]} alt="" width={44} height={44} className="h-11 w-11 rounded-xl object-cover" />
+          <div className="min-w-0 flex-1 leading-tight">
+            <p className="truncate text-[14px] font-semibold">{bundle.title}</p>
+            <p className="text-[13px]">
+              <span className="font-bold text-brand">{money(total)}</span> <s className="text-ink/40">{money(HOODIE.compareAt * bundle.qty + extras.reduce((n, a) => n + a.price, 0))}</s>
             </p>
           </div>
-          <button type="button" onClick={addToCart} tabIndex={showSticky ? 0 : -1} className="btn-brand h-11 px-6 text-[16px]">
+          <button type="button" onClick={(e) => addToCart(e.currentTarget)} tabIndex={showSticky ? 0 : -1} className="btn-brand h-11 rounded-xl px-5 text-[14px]">
             Add to cart
           </button>
         </div>
@@ -262,3 +320,4 @@ export function ProductMain() {
     </>
   );
 }
+

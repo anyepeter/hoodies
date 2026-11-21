@@ -52,6 +52,99 @@ body {
   }
 }
 
+/* Visible focus for keyboard users only */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+/* Fieldsets default to min-width: min-content, so truncated text inside one widens the whole page. */
+fieldset {
+  min-width: 0;
+}
+
+/* Film grain on dark surfaces, so they don't read as flat black */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.08;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* A light sweep across the main button every few seconds */
+.shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 35%, rgb(255 255 255 / 0.28) 50%, transparent 65%);
+  transform: translateX(-100%);
+  animation: shine 4.5s ease-in-out 1.5s infinite;
+  pointer-events: none;
+}
+@keyframes shine {
+  0%,
+  70% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Hero words rise in one after another; the product card floats */
+.hero-in {
+  animation: rise 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+}
+.float {
+  animation:
+    rise 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both,
+    bob 6s ease-in-out 1.4s infinite;
+}
+@keyframes bob {
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Each page fades up on navigation (app/template.tsx). "backwards", not "both": a transform left on this
+   wrapper after the animation would turn it into the containing block for the fixed add-to-cart bar. */
+.page-in {
+  animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+dialog.sheet[open] {
+  animation: pop 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+dialog.viewer[open] {
+  animation: fade 0.25s ease-out;
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
 .no-scrollbar {
   scrollbar-width: none;
 }
@@ -101,6 +194,12 @@ dialog.modal[open] {
     opacity: 1;
     transform: none;
     transition: none;
+  }
+  .shine,
+  .hero-in,
+  .float,
+  .page-in {
+    animation: none;
   }
   html {
     scroll-behavior: auto;

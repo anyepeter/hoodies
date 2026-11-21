@@ -19,7 +19,8 @@ interface CartState {
   total: number;
   open: boolean;
   setOpen: (open: boolean) => void;
-  add: (lines: Omit<CartLine, "qty">[]) => void;
+  /** Adds and opens the drawer, after `openAfterMs` if given (so a fly-to-cart animation can land first). */
+  add: (lines: Omit<CartLine, "qty">[], opts?: { openAfterMs?: number }) => void;
   setQty: (key: string, qty: number) => void;
   remove: (key: string) => void;
 }
@@ -75,7 +76,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     document.documentElement.style.overflow = open ? "hidden" : "";
   }, [open]);
 
-  const add = useCallback((incoming: Omit<CartLine, "qty">[]) => {
+  const add = useCallback((incoming: Omit<CartLine, "qty">[], opts?: { openAfterMs?: number }) => {
     setLines((prev) =>
       incoming.reduce<CartLine[]>(
         (next, line) =>
@@ -83,7 +84,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         prev,
       ),
     );
-    setOpen(true);
+    if (opts?.openAfterMs) setTimeout(() => setOpen(true), opts.openAfterMs);
+    else setOpen(true);
   }, []);
 
   const setQty = useCallback((key: string, qty: number) => {

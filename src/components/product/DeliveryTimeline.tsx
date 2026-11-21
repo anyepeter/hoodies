@@ -16,7 +16,7 @@ export function DeliveryTimeline() {
   const steps = [
     { icon: CartAddIcon, date: today ? fmt(today) : "", label: "Ordered" },
     { icon: TruckIcon, date: today ? `${fmt(plus(today, 1))} - ${fmt(plus(today, 2))}` : "", label: "Ready to ship" },
-    { icon: GiftIcon, date: today ? `${fmt(plus(today, 5))} - ${fmt(plus(today, 7))}` : "", label: "Delivired" },
+    { icon: GiftIcon, date: today ? `${fmt(plus(today, 5))} - ${fmt(plus(today, 7))}` : "", label: "Delivered" },
   ];
 
   return (
