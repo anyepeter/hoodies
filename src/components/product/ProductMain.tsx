@@ -47,11 +47,29 @@ export function ProductMain({ stock }: { stock: Record<Style, number> }) {
   const [showSticky, setShowSticky] = useState(false);
   const buyButton = useRef<HTMLButtonElement>(null);
   const picker = useRef<HTMLDivElement>(null);
+  const fromCard = useRef(false);
 
   const bundle = BUNDLES.find((b) => b.id === bundleId)!;
   const chosen = choices.slice(0, bundle.qty);
   const extras = ADD_ONS.filter((a) => addOns.has(a.id));
   const total = bundle.price + extras.reduce((n, a) => n + a.price, 0);
+
+  // Arriving from a home-page style card (?style=Shinobi): that style for every hoodie, and the packs in view.
+  // Read after mount because the page itself is static. A sold-out style is ignored (the default stays).
+  useEffect(() => {
+    if (fromCard.current) return;
+    fromCard.current = true;
+    const wanted = new URLSearchParams(window.location.search).get("style");
+    const style = STYLES.find((s) => s === wanted);
+    if (!style || stock[style] <= 0) return;
+    // Next frame, then scroll once it has rendered. Not cancelled on cleanup: the ref above already makes this
+    // run once, even when React mounts twice in development.
+    requestAnimationFrame(() => {
+      setChoices((prev) => prev.map((c) => ({ ...c, style })));
+      setPhoto(Math.max(0, HOODIE.images.findIndex((img) => img.style === style)));
+      requestAnimationFrame(() => picker.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    });
+  }, [stock]);
 
   // The bottom bar takes over once the real button has scrolled up out of sight.
   useEffect(() => {

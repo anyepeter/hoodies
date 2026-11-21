@@ -168,11 +168,6 @@ dialog.viewer[open] {
   animation-play-state: paused;
 }
 
-/* Size buttons pop in one after another when a style card opens them */
-.size-pop {
-  animation: rise 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.2) both;
-}
-
 /* Hollow letters for the crossing banner */
 .outline-text {
   color: transparent;
@@ -271,8 +266,7 @@ dialog.modal[open] {
   .floating-shop,
   .pulse-ring,
   .drift,
-  .zoom-in,
-  .size-pop {
+  .zoom-in {
     animation: none;
   }
   html {

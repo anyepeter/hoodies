@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PaymentLogo } from "@/components/checkout/PaymentLogos";
+import { discountPercentOf } from "@/lib/orders/payment-rails";
 import { getOrderByToken } from "@/lib/orders/queries";
 import { orderNumber } from "@/lib/orders/status";
 import { STORE_NAME, money } from "@/lib/store";
@@ -29,7 +31,10 @@ export default async function InvoicePage({ params }: { params: Promise<{ token:
 
   const number = orderNumber(order.number);
   const stamp = STAMP[order.status]!;
-  const saved = Number(order.compareAtTotal) - Number(order.subtotal);
+  const subtotal = Number(order.subtotal);
+  const discount = Number(order.paymentDiscount);
+  // Pack savings against full price, plus the payment method's discount.
+  const saved = Number(order.compareAtTotal) - subtotal + discount;
 
   return (
     <div className="min-h-dvh bg-zinc-200 px-3 py-6 text-ink print:bg-white print:p-0 sm:py-10">
@@ -139,8 +144,16 @@ export default async function InvoicePage({ params }: { params: Promise<{ token:
             <dl className="space-y-1.5 text-[14px]">
               <div className="flex justify-between">
                 <dt className="text-ink/60">Subtotal</dt>
-                <dd className="tabular-nums">{money(Number(order.subtotal))}</dd>
+                <dd className="tabular-nums">{money(subtotal)}</dd>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between">
+                  <dt className="text-ink/60">
+                    {order.paymentMethod} discount ({discountPercentOf(discount, subtotal)})
+                  </dt>
+                  <dd className="tabular-nums">−{money(discount)}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-ink/60">Shipping</dt>
                 <dd>{Number(order.shipping) > 0 ? money(Number(order.shipping)) : "Free"}</dd>
@@ -161,9 +174,15 @@ export default async function InvoicePage({ params }: { params: Promise<{ token:
         </div>
 
         <section className="mt-8 rounded-xl bg-zinc-100 p-4 print:border print:border-black/15 print:bg-white sm:p-5">
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-ink/50">Payment · {order.paymentMethod}</h2>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-ink/50">Payment method</h2>
+            <span className="flex items-center gap-2 text-[14px] font-semibold">
+              <PaymentLogo paymentKey={order.paymentKey} name={order.paymentMethod} />
+              {order.paymentMethod}
+            </span>
+          </div>
           {order.status === "PENDING" ? (
-            <p className="mt-2 whitespace-pre-line text-[14px] leading-relaxed">{order.paymentInstructions}</p>
+            <p className="mt-2 text-[14px] leading-relaxed">Payment details are sent to you in the chat.</p>
           ) : order.paidAt ? (
             <p className="mt-2 text-[14px]">
               Received {date(order.paidAt)}

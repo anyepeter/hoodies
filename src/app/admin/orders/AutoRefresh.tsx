@@ -10,9 +10,10 @@ const FALLBACK_MS = process.env.NEXT_PUBLIC_PUSHER_KEY ? 5 * 60_000 : 60_000;
 /**
  * Re-renders the current admin page when an order changes: on the `admin:<event>` window events that
  * AdminRealtime dispatches for each Pusher ping, when the tab comes back into view, and on a slow timer.
- * `orderId` limits it to pings about that one order.
+ * `orderId` limits it to pings about that one order (and `conversationId`, its chat: "chat.message" pings carry
+ * the conversation's id).
  */
-export function AutoRefresh({ events, orderId }: { events: string[]; orderId?: string }) {
+export function AutoRefresh({ events, orderId, conversationId }: { events: string[]; orderId?: string; conversationId?: string | null }) {
   const router = useRouter();
   const key = events.join(",");
 
@@ -23,7 +24,7 @@ export function AutoRefresh({ events, orderId }: { events: string[]; orderId?: s
     };
     const onPing = (e: Event) => {
       const id = (e as CustomEvent<{ id?: string } | undefined>).detail?.id;
-      if (orderId && id && id !== orderId) return;
+      if (orderId && id && id !== orderId && id !== conversationId) return;
       refresh();
     };
     const onVisible = () => document.visibilityState === "visible" && router.refresh();
@@ -35,7 +36,7 @@ export function AutoRefresh({ events, orderId }: { events: string[]; orderId?: s
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(timer);
     };
-  }, [key, orderId, router]);
+  }, [key, orderId, conversationId, router]);
 
   return null;
 }

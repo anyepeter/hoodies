@@ -68,7 +68,10 @@ export function Hero() {
   );
 }
 
-/** Akatsuki and Shinobi side by side, each with pieces left (live, from the page) and its own Add to cart. */
+/**
+ * Akatsuki and Shinobi side by side, each with pieces left (live, from the page). Their Add to cart opens the
+ * hoodie page with that style picked (/products/<handle>?style=Shinobi): sizes and packs are chosen there.
+ */
 export function StylesSpotlight({ stock }: { stock: Record<Style, number> }) {
   const styles: { name: Style; text: string; front: string; alt: string }[] = [
     { name: "Akatsuki", text: "Black, with the red clouds.", front: "/store/akatsuki-front.webp", alt: "/store/akatsuki-2.webp" },

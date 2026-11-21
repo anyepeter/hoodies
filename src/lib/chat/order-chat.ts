@@ -6,7 +6,11 @@ import { notifyAdmins } from "@/lib/notify";
 import { orderNumber } from "@/lib/orders/status";
 import { chatChannel, ping } from "@/lib/pusher-server";
 import { money } from "@/lib/store";
-import { myConversation, newChatToken } from "./server";
+import { cookies } from "next/headers";
+import { fillPaymentTemplate } from "@/lib/orders/payment-rails";
+import { CHAT_COOKIE, hashChatToken, newChatToken } from "./server";
+
+const CHAT_TOKEN = /^[A-Za-z0-9_-]{43}$/; // same shape server.ts accepts (32 bytes, base64url)
 import { CHAT_EVENT, INVOICE_COPY, previewOf, type ChatMessageDTO, type InvoiceAnswer, type InvoiceDTO, type MessageKind } from "./shared";
 
 /*
@@ -29,7 +33,13 @@ export async function ensureOrderConversation(
   tx: Tx,
   who: { name: string; email: string; visitorId: string | null; userAgent: string | null },
 ): Promise<{ id: string; token: string | null }> {
-  const mine = await myConversation();
+  // Look the cookie's conversation up with the transaction's own connection (the global client would need a
+  // second connection while this transaction holds one: with a pool of 1 that waits until it times out).
+  const cookieToken = (await cookies()).get(CHAT_COOKIE)?.value;
+  const mine =
+    cookieToken && CHAT_TOKEN.test(cookieToken)
+      ? await tx.conversation.findUnique({ where: { visitorToken: hashChatToken(cookieToken) }, select: { id: true, name: true, email: true } })
+      : null;
   if (mine) {
     // Fill in who they are if the chat didn't know yet.
     await tx.conversation.update({ where: { id: mine.id }, data: { name: mine.name ?? who.name, email: mine.email ?? who.email.toLowerCase(), status: "OPEN" } });
@@ -50,8 +60,9 @@ export async function postInvoice(tx: Tx, order: { id: string; number: number; t
   await tx.chatMessage.create({ data: { conversationId, sender: "ADMIN", kind: "INVOICE", orderId: order.id, body, createdAt: now } });
   await tx.conversation.update({
     where: { id: conversationId },
-    // Counts as something for the admin to look at (a new order waiting in the chat).
-    data: { lastMessage: previewOf(`New order ${orderNumber(order.number)} · ${order.total}`), lastMessageAt: now, unreadForAdmin: { increment: 1 }, status: "OPEN" },
+    // Unread for both: the admin has a new order waiting, and a shopper who closed the tab before the chat opened
+    // sees a badge on the bubble next time.
+    data: { lastMessage: previewOf(`New order ${orderNumber(order.number)} · ${order.total}`), lastMessageAt: now, unreadForAdmin: { increment: 1 }, unreadForVisitor: { increment: 1 }, status: "OPEN" },
   });
   await tx.order.update({ where: { id: order.id }, data: { conversationId } });
 }
@@ -132,9 +143,11 @@ export class InvoiceAnswerError extends Error {}
 export async function answerInvoice(conv: { id: string; name: string | null }, messageId: string, answer: InvoiceAnswer): Promise<void> {
   const msg = await prisma.chatMessage.findFirst({ where: { id: messageId, conversationId: conv.id, kind: "INVOICE" }, select: { id: true, orderId: true } });
   if (!msg?.orderId) throw new InvoiceAnswerError("That invoice isn't in your chat.");
-  const order = await prisma.order.findUnique({ where: { id: msg.orderId }, select: { id: true, number: true, invoiceAnswer: true } });
+  const order = await prisma.order.findUnique({ where: { id: msg.orderId }, select: { id: true, number: true, invoiceAnswer: true, status: true } });
   if (!order) throw new InvoiceAnswerError("That order doesn't exist any more.");
   if (order.invoiceAnswer) throw new InvoiceAnswerError("You've already answered for this invoice.");
+  // Only an order still waiting for payment can be confirmed or questioned (the widget hides the buttons otherwise).
+  if (order.status !== "PENDING") throw new InvoiceAnswerError("This order has moved on already. Write to us below if something's not right.");
 
   const now = new Date();
   const yes = answer === "confirmed";
@@ -164,7 +177,7 @@ export async function answerInvoice(conv: { id: string; name: string | null }, m
 
 /** The payment-details message for an order, from its method's template: {order}, {total}, {details}. */
 export function paymentMessage(template: string, vars: { order: string; total: string; details: string }): string {
-  return template.replaceAll("{order}", vars.order).replaceAll("{total}", vars.total).replaceAll("{details}", vars.details).trim();
+  return fillPaymentTemplate(template, vars);
 }
 
 export class PaymentDetailsError extends Error {}

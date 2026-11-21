@@ -1,31 +1,15 @@
-"use client";
-
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
-import { useCart } from "@/components/cart/CartProvider";
-import { CloseIcon } from "@/components/icons";
-import { flyToCart } from "@/lib/fly-to-cart";
-import { HOODIE, SIZES, STYLE_IMAGE, money, type Size, type Style } from "@/lib/store";
+import { HOODIE, money, type Style } from "@/lib/store";
 
 /**
  * One style in "Two styles. One mask.": photo, pieces left, price, and Add to cart. Add to cart opens the
- * sizes right on the card; tapping a size puts that hoodie in the cart (and the cart opens). `left` is the
- * live stock (read by the page from the database); at 0 the card says Sold out and can't add.
+ * hoodie page with this style already picked, so sizes and packs are chosen in one place. `left` is the live
+ * stock (read by the page from the database); at 0 the card says Sold out and its button is disabled.
  */
 export function StyleCard({ style, text, front, back, left, priority = false }: { style: Style; text: string; front: string; back: string; left: number; priority?: boolean }) {
-  const { add } = useCart();
-  const [picking, setPicking] = useState(false);
   const href = `/products/${HOODIE.handle}`;
   const soldOut = left <= 0;
-
-  const addSize = (size: Size, from: HTMLElement) => {
-    const detail = `${style} / ${size}`;
-    const flight = flyToCart(from, STYLE_IMAGE[style]);
-    // Same key as a Solo Hoodie from the product page, so the two merge in the cart.
-    add([{ key: `bundle:solo:${detail}`, title: HOODIE.title, detail, image: STYLE_IMAGE[style], price: HOODIE.price, compareAt: HOODIE.compareAt }], { openAfterMs: flight + 250 });
-    setPicking(false);
-  };
 
   return (
     <article className="group">
@@ -57,49 +41,20 @@ export function StyleCard({ style, text, front, back, left, priority = false }: 
         </p>
       </div>
 
-      {/* Add to cart → pick a size, right here */}
-      <div className="mt-4">
-        <div className={`grid transition-[grid-template-rows] duration-500 ease-[cubic-bezier(.2,.8,.2,1)] ${picking && !soldOut ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-          <div className="overflow-hidden" inert={!picking || soldOut}>
-            <div className="mb-3 rounded-2xl bg-soft p-3">
-              <div className="flex items-center justify-between">
-                <p className="text-[13px] font-semibold">Pick your size · {style}</p>
-                <button type="button" onClick={() => setPicking(false)} className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-black/5" aria-label="Close sizes">
-                  <CloseIcon className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="mt-2 grid grid-cols-5 gap-1.5">
-                {SIZES.map((s, i) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={(e) => addSize(s, e.currentTarget)}
-                    aria-label={`Add ${style} size ${s} to cart`}
-                    className={`h-11 rounded-xl border border-black/15 bg-white text-[14px] font-semibold transition hover:border-brand hover:bg-brand hover:text-white active:scale-95 ${picking ? "size-pop" : ""}`}
-                    style={{ animationDelay: `${i * 40}ms` }}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-[1fr_auto] gap-2">
-          <button
-            type="button"
-            onClick={() => setPicking((p) => !p)}
-            aria-expanded={picking && !soldOut}
-            disabled={soldOut}
-            className="btn-brand group/btn relative h-12 overflow-hidden rounded-2xl text-[15px] disabled:cursor-not-allowed disabled:bg-ink/30 disabled:active:scale-100"
-          >
-            {soldOut ? "Sold out" : picking ? "Choose a size above" : `Add to cart · ${money(HOODIE.price)}`}
-            {!soldOut && <span className="shine" aria-hidden />}
+      <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+        {soldOut ? (
+          <button type="button" disabled className="btn-brand h-12 rounded-2xl text-[15px] disabled:cursor-not-allowed disabled:bg-ink/30 disabled:active:scale-100">
+            Sold out
           </button>
-          <Link href={href} className="inline-flex h-12 items-center rounded-2xl border border-black/15 px-4 text-[14px] font-semibold transition hover:border-ink">
-            Details
+        ) : (
+          <Link href={`${href}?style=${encodeURIComponent(style)}`} className="btn-brand group/btn relative h-12 overflow-hidden rounded-2xl text-[15px]">
+            Add to cart · {money(HOODIE.price)}
+            <span className="shine" aria-hidden />
           </Link>
-        </div>
+        )}
+        <Link href={href} className="inline-flex h-12 items-center rounded-2xl border border-black/15 px-4 text-[14px] font-semibold transition hover:border-ink">
+          Details
+        </Link>
       </div>
     </article>
   );

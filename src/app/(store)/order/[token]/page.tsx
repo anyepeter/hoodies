@@ -2,15 +2,20 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PaymentLogo } from "@/components/checkout/PaymentLogos";
+import { myConversation } from "@/lib/chat/server";
+import { INVOICE_COPY } from "@/lib/chat/shared";
+import { discountPercentOf } from "@/lib/orders/payment-rails";
 import { getOrderByToken } from "@/lib/orders/queries";
 import { CUSTOMER_STATUS_LABEL, orderNumber } from "@/lib/orders/status";
 import { HOODIE, money } from "@/lib/store";
 import { CopyText } from "./CopyText";
+import { OpenChatButton, OpenChatOnLoad } from "./OpenChat";
 import { OrderTimeline } from "./OrderTimeline";
 
 // One customer's private page, found only by its secret token: always rendered fresh, never indexed.
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Your order", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Order confirmed", robots: { index: false, follow: false } };
 
 const day = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
@@ -23,6 +28,20 @@ const STATUS_TONE: Record<string, string> = {
   REFUNDED: "bg-rose-100 text-rose-900",
 };
 
+/** What the chat box says, from where the order is in the chat (invoice sent → confirmed → details sent). */
+function chatCopy(o: { invoiceAnswer: string | null; paymentDetailsSentAt: Date | null; paymentMethod: string }, total: string): { title: string; text: string } {
+  if (o.paymentDetailsSentAt) {
+    return { title: "Your payment details are in the chat", text: `Send ${total} with ${o.paymentMethod} as the message says. We ship as soon as it arrives.` };
+  }
+  if (o.invoiceAnswer === "confirmed") {
+    return { title: "Thanks for confirming your invoice", text: `We'll send your ${o.paymentMethod} payment details in the chat within 5 minutes.` };
+  }
+  if (o.invoiceAnswer === "wrong") {
+    return { title: "Tell us what needs changing", text: "Write to us in the chat and we'll send you an updated invoice." };
+  }
+  return { title: "Your invoice is in the chat.", text: `Check it and tap “${INVOICE_COPY.yesButton}” — we'll send your payment details right there.` };
+}
+
 export default async function OrderPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const order = await getOrderByToken(token);
@@ -30,9 +49,16 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
 
   const number = orderNumber(order.number);
   const total = Number(order.total);
-  const saved = Number(order.compareAtTotal) - Number(order.subtotal);
+  const subtotal = Number(order.subtotal);
+  const discount = Number(order.paymentDiscount);
+  // Pack savings against full price, plus the payment method's discount.
+  const saved = Number(order.compareAtTotal) - subtotal + discount;
   const firstName = order.name.split(/\s+/)[0] ?? order.name;
   const closed = order.status === "CANCELLED" || order.status === "REFUNDED";
+  // The invoice is in the chat of the browser that placed the order. Only that browser can open it.
+  const mine = order.conversationId ? await myConversation().catch(() => null) : null;
+  const chatHere = Boolean(order.conversationId && mine?.id === order.conversationId);
+  const chat = chatCopy(order, money(total));
 
   return (
     <section className="mx-auto max-w-[960px] px-4 pb-16 pt-8 md:px-8 md:pt-12">
@@ -43,38 +69,36 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
           </svg>
         </span>
         <p className="mt-4 text-[13px] font-bold uppercase tracking-[0.2em] text-brand">Order {number}</p>
-        <h1 className="mt-1 text-[32px] font-bold leading-tight tracking-tight md:text-[42px]">{closed ? `Order ${number}` : `Thank you, ${firstName}!`}</h1>
+        <h1 className="mt-1 text-[32px] font-bold leading-tight tracking-tight md:text-[42px]">{closed ? `Order ${number}` : "Order confirmed"}</h1>
         <p className="mt-2 text-[15px] text-ink/65">
-          Placed {day(order.createdAt)} ·{" "}
+          {!closed && <>Thank you, {firstName}. </>}Placed {day(order.createdAt)} ·{" "}
           <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-bold ${STATUS_TONE[order.status]}`}>{CUSTOMER_STATUS_LABEL[order.status]}</span>
         </p>
       </header>
 
       {order.status === "PENDING" && (
-        <div className="mt-8 overflow-hidden rounded-3xl bg-ink p-5 text-white md:p-8" id="payment">
-          <p className="text-[12px] font-bold uppercase tracking-[0.2em] text-brand">To finish your order</p>
-          <p className="mt-1 text-[28px] font-bold leading-tight tracking-tight md:text-[34px]">Send {money(total)}</p>
-          <dl className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl bg-white/10 px-4 py-3">
-              <dt className="text-[11px] font-semibold uppercase tracking-wider text-white/55">Amount</dt>
-              <dd className="mt-0.5 flex items-center justify-between gap-2 text-[17px] font-bold">
-                {money(total)} <CopyText value={total.toFixed(2)} label="Copy" className="bg-white/15 text-white hover:bg-white/25" />
-              </dd>
-            </div>
-            <div className="rounded-2xl bg-white/10 px-4 py-3">
-              <dt className="text-[11px] font-semibold uppercase tracking-wider text-white/55">Reference</dt>
-              <dd className="mt-0.5 flex items-center justify-between gap-2 text-[17px] font-bold">
-                {number} <CopyText value={number} label="Copy" className="bg-white/15 text-white hover:bg-white/25" />
-              </dd>
-            </div>
-            <div className="rounded-2xl bg-white/10 px-4 py-3">
-              <dt className="text-[11px] font-semibold uppercase tracking-wider text-white/55">Pay with</dt>
-              <dd className="mt-0.5 text-[17px] font-bold">{order.paymentMethod}</dd>
-            </div>
-          </dl>
-          <div className="mt-4 whitespace-pre-line rounded-2xl bg-white px-4 py-4 text-[15px] leading-relaxed text-ink md:px-5">{order.paymentInstructions}</div>
-          <p className="mt-4 text-[13px] leading-relaxed text-white/60">
-            We ship as soon as your payment arrives, and this page shows it when it does. This store is a design preview: your order is recorded but nothing is charged or shipped.
+        <div className="mx-auto mt-8 max-w-2xl rounded-3xl bg-ink p-5 text-white md:p-8" id="chat" data-testid="order-chat-box">
+          {chatHere && <OpenChatOnLoad />}
+          <p className="text-[12px] font-bold uppercase tracking-[0.2em] text-brand">Next step · in the chat</p>
+          {order.conversationId ? (
+            <>
+              <p className="mt-2 text-[24px] font-bold leading-tight tracking-tight md:text-[28px]">{chat.title}</p>
+              <p className="mt-2 text-[15px] leading-relaxed text-white/80">{chat.text}</p>
+              {chatHere ? (
+                <OpenChatButton className="mt-5 w-full sm:w-auto" />
+              ) : (
+                <p className="mt-4 rounded-2xl bg-white/10 px-4 py-3 text-[14px] leading-relaxed text-white/80">
+                  Your chat is on the device you ordered from: open this page there to see it. Or write to info@akatsukizipup.com and quote {number}.
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="mt-2 text-[15px] leading-relaxed text-white/80">
+              We&apos;ll send you the details to pay {money(total)} with {order.paymentMethod}. Questions? Write to info@akatsukizipup.com and quote {number}.
+            </p>
+          )}
+          <p className="mt-5 flex items-center gap-2 text-[13px] text-white/60">
+            Paying with <PaymentLogo paymentKey={order.paymentKey} name={order.paymentMethod} /> <span className="font-semibold text-white">{order.paymentMethod}</span>
           </p>
         </div>
       )}
@@ -126,8 +150,16 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
           <dl className="mt-2 space-y-1.5 border-t border-black/5 pt-3 text-[15px]">
             <div className="flex justify-between">
               <dt className="text-ink/65">Subtotal</dt>
-              <dd>{money(Number(order.subtotal))}</dd>
+              <dd>{money(subtotal)}</dd>
             </div>
+            {discount > 0 && (
+              <div className="flex justify-between font-semibold text-brand">
+                <dt>
+                  {order.paymentMethod} discount ({discountPercentOf(discount, subtotal)})
+                </dt>
+                <dd>−{money(discount)}</dd>
+              </div>
+            )}
             <div className="flex justify-between">
               <dt className="text-ink/65">Shipping</dt>
               <dd className="font-semibold">{Number(order.shipping) > 0 ? money(Number(order.shipping)) : "Free"}</dd>

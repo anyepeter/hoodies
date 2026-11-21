@@ -1,13 +1,15 @@
 import { randomBytes } from "node:crypto";
 import { after, type NextRequest } from "next/server";
+import { ensureOrderConversation, paymentMessage, pingAfterInvoice, postInvoice } from "@/lib/chat/order-chat";
+import { CHAT_COOKIE, chatCookieOptions } from "@/lib/chat/server";
 import { prisma } from "@/lib/db";
 import { clientIp, fail, ok, rateLimit, readJson, sameOrigin, serverError } from "@/lib/http";
 import { notifyAdmins } from "@/lib/notify";
 import { orderSchema } from "@/lib/orders/checkout-schema";
 import { countryName } from "@/lib/orders/countries";
 import { expireUnpaidOrders } from "@/lib/orders/expire";
+import { discountCents, ratePercent } from "@/lib/orders/payment-rails";
 import { MAX_QTY, decimal, describeUnits, moneyCents, priceCart, summarizeLines } from "@/lib/orders/pricing";
-import { paymentSnapshot } from "@/lib/orders/queries";
 import { orderNumber } from "@/lib/orders/status";
 import { revalidateStorefront } from "@/lib/stock";
 import { STYLES, type Style } from "@/lib/store";
@@ -26,14 +28,16 @@ class OutOfStock extends Error {
   }
 }
 
-/**
- * Places an order. Prices come from src/lib/store.ts only: the body carries cart keys and quantities, never
- * amounts. Stock is taken with one conditional UPDATE per style inside the same transaction that writes the
- * order, so two shoppers can never buy the same last hoodie.
- */
 /** Most hoodies one order may take. */
 const MAX_HOODIES_PER_ORDER = 6;
 
+/**
+ * Places an order. Prices come from src/lib/store.ts only: the body carries cart keys and quantities, never
+ * amounts, and the payment method's discount is read from its database row. Stock is taken with one
+ * conditional UPDATE per style inside the same transaction that writes the order, so two shoppers can never
+ * buy the same last hoodie. The same transaction posts the invoice into the shopper's chat (made for them if
+ * they never chatted: the response then sets the chat cookie), so an order never exists without its invoice.
+ */
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return fail("Bad origin.", 403);
   if (!(await rateLimit(`orders:${clientIp(req)}`, 5, 60 * 60))) {
@@ -58,13 +62,20 @@ export async function POST(req: NextRequest) {
   after(expireUnpaidOrders);
 
   try {
-    const option = await prisma.paymentOption.findFirst({ where: { id: body.paymentOptionId, active: true }, select: { id: true, name: true, instructions: true, details: true } });
+    const option = await prisma.paymentOption.findFirst({
+      where: { id: body.paymentOptionId, active: true },
+      select: { id: true, name: true, key: true, instructions: true, details: true, discountRate: true },
+    });
     if (!option) return fail("That payment method isn't available any more. Choose another one.", 400);
 
     const rawVisitor = req.cookies.get(VISITOR_COOKIE)?.value;
     const visitorId = rawVisitor && UUID_RE.test(rawVisitor) ? rawVisitor.toLowerCase() : null;
     const token = randomBytes(24).toString("base64url");
-    const total = moneyCents(cart.totalCents);
+    // The method's discount (crypto: 10% off the items), from its row. Nothing the browser sends changes it.
+    const discount = discountCents(cart.subtotalCents, option.discountRate);
+    const totalCents = cart.subtotalCents - discount + cart.shippingCents;
+    const total = moneyCents(totalCents);
+    const pays = discount > 0 ? `${option.name} (${ratePercent(option.discountRate)} off, −${moneyCents(discount)})` : option.name;
     const stockTaken = Object.fromEntries(STYLES.filter((s) => cart.units[s] > 0).map((s) => [s, cart.units[s]]));
 
     const order = await prisma.$transaction(
@@ -80,12 +91,12 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // The number is needed inside the payment instructions ("put order #1001 as the reference"), so take
-        // it from the sequence first instead of creating the order and rewriting it.
+        // The number is needed inside the payment message ("write #1001 in the note"), so take it from the
+        // sequence first instead of creating the order and rewriting it.
         const [{ n }] = await tx.$queryRaw<{ n: bigint }[]>`SELECT nextval(pg_get_serial_sequence('"Order"', 'number')) AS n`;
         const number = Number(n);
 
-        return tx.order.create({
+        const created = await tx.order.create({
           data: {
             number,
             token,
@@ -101,11 +112,15 @@ export async function POST(req: NextRequest) {
             notes: body.notes,
             paymentOptionId: option.id,
             paymentMethod: option.name,
-            paymentInstructions: paymentSnapshot(option, orderNumber(number), total),
+            paymentKey: option.key,
+            paymentDiscount: decimal(discount),
+            // The admin's reference copy of the payment message, as it read when the order was placed. The
+            // shopper never sees it here: the admin sends the details in the chat after they confirm.
+            paymentInstructions: paymentMessage(option.instructions, { order: orderNumber(number), total, details: option.details ?? "" }),
             compareAtTotal: decimal(cart.compareAtCents),
             subtotal: decimal(cart.subtotalCents),
             shipping: decimal(cart.shippingCents),
-            total: decimal(cart.totalCents),
+            total: decimal(totalCents),
             stockTaken,
             visitorId,
             items: {
@@ -123,11 +138,20 @@ export async function POST(req: NextRequest) {
               })),
             },
             events: {
-              create: { type: "created", toStatus: "PENDING", message: `Pays by ${option.name} · took ${describeUnits(cart.units) || "no hoodies"} from stock` },
+              create: {
+                type: "created",
+                toStatus: "PENDING",
+                message: `Pays by ${pays} · took ${describeUnits(cart.units) || "no hoodies"} from stock · invoice sent in the chat`,
+              },
             },
           },
           select: { id: true, number: true },
         });
+
+        // The invoice goes into the shopper's own chat, with "is everything correct?" under it.
+        const conversation = await ensureOrderConversation(tx, { name: body.name, email: body.email, visitorId, userAgent: req.headers.get("user-agent") });
+        await postInvoice(tx, { id: created.id, number: created.number, total }, conversation.id);
+        return { ...created, conversation };
       },
       { maxWait: 10_000, timeout: 20_000 },
     );
@@ -139,10 +163,14 @@ export async function POST(req: NextRequest) {
       { title: `New order ${number} · ${total}`, body: `${body.name} · ${summarizeLines(cart.lines)}`, url: `/admin/orders/${order.id}`, tag: `order-${order.id}` },
       { id: order.id },
     );
+    pingAfterInvoice(order.conversation.id);
     if (visitorId) {
       after(() => prisma.visitor.updateMany({ where: { id: visitorId }, data: { email: body.email } }).catch(() => {}));
     }
-    return ok({ token, number }, 201);
+    const res = ok({ token, number, conversationId: order.conversation.id }, 201);
+    // First chat for this browser: hand it the key to the conversation the invoice is in.
+    if (order.conversation.token) res.cookies.set(CHAT_COOKIE, order.conversation.token, chatCookieOptions);
+    return res;
   } catch (err) {
     if (err instanceof OutOfStock) {
       const message =

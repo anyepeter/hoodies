@@ -58,6 +58,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           status: true,
           total: true,
           paymentMethod: true,
+          invoiceAnswer: true,
+          paymentDetailsSentAt: true,
           createdAt: true,
           items: { select: { quantity: true, kind: true, sku: true } },
         },
@@ -94,6 +96,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const counts = new Map(groups.map((g) => [g.status, g._count._all]));
   const allCount = groups.reduce((n, g) => n + g._count._all, 0);
   const pages = Math.max(1, Math.ceil(filteredCount / PAGE_SIZE));
+  /** Where an unpaid order is in the chat: a small chip next to its status. */
+  const chatChip = (o: { status: string; invoiceAnswer: string | null; paymentDetailsSentAt: Date | null }) => {
+    if (o.status !== "PENDING") return null;
+    if (o.paymentDetailsSentAt) return <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600">details sent</span>;
+    if (o.invoiceAnswer === "confirmed") return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">confirmed in chat</span>;
+    if (o.invoiceAnswer === "wrong") return <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-brand">invoice wrong</span>;
+    return null;
+  };
   const hoodies = (items: { quantity: number; kind: string; sku: string }[]) =>
     items.reduce((n, i) => n + (i.kind === "bundle" ? i.quantity * (BUNDLES.find((b) => b.id === i.sku)?.qty ?? 1) : 0), 0);
 
@@ -175,7 +185,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     </td>
                     <td className="px-3 py-3 align-top text-zinc-600">{o.paymentMethod}</td>
                     <td className="px-3 py-3 align-top">
-                      <StatusPill status={o.status} />
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <StatusPill status={o.status} />
+                        {chatChip(o)}
+                      </span>
                     </td>
                     <td className="px-5 py-3 text-right align-top font-semibold tabular-nums">{usd(o.total)}</td>
                   </tr>
@@ -197,6 +210,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   <p className="truncate text-xs text-zinc-500">{o.email}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                     <StatusPill status={o.status} />
+                    {chatChip(o)}
                     <span>{shortDate(o.createdAt)}</span>
                     <span>· {o.paymentMethod}</span>
                   </div>

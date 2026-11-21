@@ -28,7 +28,7 @@ export interface InvoiceDTO {
   createdAt: string;
   lines: { title: string; detail: string | null; quantity: number; total: string }[];
   subtotal: string;
-  discount: string | null; // "-$11.46 (Cryptocurrency, 10% off)" or null
+  discount: string | null; // "−$11.46 (Cryptocurrency)" or null
   shipping: string; // "Free"
   total: string;
   paymentMethod: string;

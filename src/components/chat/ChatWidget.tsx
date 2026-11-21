@@ -2,12 +2,13 @@
 
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { CloseIcon } from "@/components/icons";
-import { CHAT_EVENT, EMAIL_MAX, MESSAGE_MAX, NAME_MAX, type ChatMessageDTO, type VisitorConversationDTO } from "@/lib/chat/shared";
+import { CHAT_EVENT, EMAIL_MAX, MESSAGE_MAX, NAME_MAX, type ChatMessageDTO, type InvoiceAnswer, type VisitorConversationDTO } from "@/lib/chat/shared";
 import { chatChannel, listen } from "@/lib/pusher-client";
 import { HOODIE } from "@/lib/store";
-import { STICKY_BAR_PATH, setChatOpen } from "./chat-open";
+import { STICKY_BAR_PATH, handleOpenRequests, setChatOpen } from "./chat-open";
+import { PaymentCard, VisitorInvoice } from "./OrderCards";
 
 /*
  * Live chat for shoppers: a bubble bottom-right, a panel (full-screen sheet on phones, a 380 px card on bigger
@@ -20,6 +21,11 @@ import { STICKY_BAR_PATH, setChatOpen } from "./chat-open";
  *
  * The conversation's secret lives in an httpOnly cookie; only its id is kept in localStorage, so a page load
  * knows whether there's anything to check (shoppers who never chatted cost the server nothing).
+ *
+ * Orders live in the chat: placing one posts its invoice here (an INVOICE card with "is everything correct?"
+ * and two buttons), and the store later sends the payment details (a PAYMENT card with Copy). The order-confirmed
+ * page fires "akz:open-chat": the panel opens, loads the thread by cookie (a first-time chatter's browser doesn't
+ * know the conversation yet) and scrolls to the invoice.
  */
 
 const ID_KEY = "akz_chat_id";
@@ -100,6 +106,9 @@ export function ChatWidget() {
   const [draft, setDraft] = useState("");
   const [errors, setErrors] = useState<Partial<Record<Field | "form", string>>>({});
   const [starting, setStarting] = useState(false);
+  // Opened for an order: show the loading skeleton (not the "start a chat" form) until the thread arrives.
+  const [expecting, setExpecting] = useState(false);
+  const [focusTick, setFocusTick] = useState(0);
 
   const openRef = useRef(false);
   const convIdRef = useRef<string | null>(null);
@@ -108,6 +117,8 @@ export function ChatWidget() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const honeypotRef = useRef<HTMLInputElement>(null);
+  /** "waiting": opened for an order, scroll to the invoice once the thread has loaded ("ready"). */
+  const focusInvoice = useRef<"no" | "waiting" | "ready">("no");
 
   const forget = useCallback(() => {
     rememberId(null);
@@ -138,10 +149,15 @@ export function ChatWidget() {
       if (convIdRef.current) setNotice("This chat has ended. Write below to start a new one.");
       forget();
       setMessages([]);
+      focusInvoice.current = "no";
     } else {
       adopt(c);
       setUnread(0);
       setMessages((prev) => merge(r.data.messages, prev));
+      if (focusInvoice.current === "waiting") {
+        focusInvoice.current = "ready";
+        setFocusTick((n) => n + 1);
+      }
     }
     setLoaded(true);
   }, [adopt, forget]);
@@ -174,6 +190,22 @@ export function ChatWidget() {
       else if ((data as { from?: string } | null)?.from !== "VISITOR") void peek();
     });
   }, [convId, loadThread, peek]);
+
+  // "akz:open-chat" (the order-confirmed page): open the panel on the shopper's invoice.
+  useEffect(
+    () =>
+      handleOpenRequests(() => {
+        focusInvoice.current = "waiting";
+        setNotice(null);
+        if (!convIdRef.current) {
+          setExpecting(true);
+          setLoaded(false);
+        }
+        if (openRef.current) void loadThread();
+        else setOpen(true); // opening loads the thread
+      }),
+    [loadThread],
+  );
 
   // Open panel: load now, then the slow safety refresh while the tab is visible.
   useEffect(() => {
@@ -208,12 +240,28 @@ export function ChatWidget() {
     };
   }, [open]);
 
-  // Keep the newest message in view.
+  // Keep the newest message in view; when opened for an order, the newest invoice instead: all of it when it
+  // fits, otherwise its bottom (the question and the two buttons are what they need to see).
   const last = messages.at(-1);
   useEffect(() => {
     const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [last?.id, last?.pending, open, loaded]);
+    if (!el) return;
+    if (focusInvoice.current === "ready") {
+      focusInvoice.current = "no";
+      const cards = el.querySelectorAll<HTMLElement>("[data-invoice-card]");
+      const card = cards[cards.length - 1];
+      if (card) {
+        const l = el.getBoundingClientRect();
+        const r = card.getBoundingClientRect();
+        const topToTop = r.top - l.top - 12;
+        const bottomToBottom = r.bottom - l.bottom + 12;
+        // The larger of the two: top-aligned when the card fits (its bottom is then in view too), else bottom-aligned.
+        el.scrollTop += Math.max(topToTop, bottomToBottom);
+        return;
+      }
+    }
+    el.scrollTop = el.scrollHeight;
+  }, [last?.id, last?.pending, open, loaded, focusTick]);
 
   const close = useCallback(() => {
     const hadFocus = panelRef.current?.contains(document.activeElement);
@@ -278,7 +326,7 @@ export function ChatWidget() {
     if (retryId) {
       setMessages((prev) => prev.map((m) => (m.id === retryId ? { ...m, pending: "sending", error: undefined } : m)));
     } else {
-      setMessages((prev) => [...prev, { id: localId, sender: "VISITOR", body: text, createdAt: new Date().toISOString(), pending: "sending" }]);
+      setMessages((prev) => [...prev, { id: localId, sender: "VISITOR", body: text, createdAt: new Date().toISOString(), kind: "TEXT", pending: "sending" }]);
       setDraft("");
     }
 
@@ -302,6 +350,18 @@ export function ChatWidget() {
     } else {
       setMessages((prev) => prev.map((m) => (m.id === localId ? { ...m, pending: "failed", error: r.error } : m)));
     }
+  };
+
+  /** "Yes, all correct" / "Something's wrong" under an invoice. Resolves to an error sentence, or null. */
+  const answerInvoice = async (messageId: string, answer: InvoiceAnswer): Promise<string | null> => {
+    const r = await api<Thread>("/api/chat/invoice", { method: "POST", body: { messageId, answer } });
+    if (r.ok) {
+      if (r.data.conversation) adopt(r.data.conversation);
+      setMessages((prev) => merge(r.data.messages, prev));
+      return null;
+    }
+    if (r.status === 409) void loadThread(); // answered already (another tab?): show where it stands
+    return r.error;
   };
 
   const submit = (e?: FormEvent) => {
@@ -341,7 +401,7 @@ export function ChatWidget() {
     ? "sm:bottom-[calc(9.5rem_+_env(safe-area-inset-bottom))] sm:h-[min(560px,calc(100dvh_-_11.5rem))]"
     : "sm:bottom-[5.75rem] sm:h-[min(600px,calc(100dvh_-_7.5rem))]";
 
-  const showThread = Boolean(conv) || (Boolean(convId) && !loaded);
+  const showThread = Boolean(conv) || ((Boolean(convId) || expecting) && !loaded);
   const label = unread > 0 ? `Chat with us, ${unread} new ${unread === 1 ? "reply" : "replies"}` : "Chat with us";
 
   return (
@@ -418,6 +478,14 @@ export function ChatWidget() {
                 <p key={m.id} className="text-center text-[12px] text-ink/50">
                   {m.body}
                 </p>
+              ) : m.kind === "INVOICE" && m.invoice ? (
+                <CardRow key={m.id} meta={timeOf(m.createdAt)} invoice>
+                  <VisitorInvoice invoice={m.invoice} onAnswer={(a) => answerInvoice(m.id, a)} />
+                </CardRow>
+              ) : m.kind === "PAYMENT" ? (
+                <CardRow key={m.id} meta={timeOf(m.createdAt)}>
+                  <PaymentCard title={m.invoice ? `Payment details · ${m.invoice.number}` : "Payment details"} body={m.body} />
+                </CardRow>
               ) : (
                 <Bubble
                   key={m.id}
@@ -540,6 +608,16 @@ export function ChatWidget() {
         </div>
       )}
     </>
+  );
+}
+
+/** An order card from the store, left-aligned like the store's replies, a little wider than a bubble. */
+function CardRow({ meta, invoice = false, children }: { meta: string; invoice?: boolean; children: ReactNode }) {
+  return (
+    <div className="flex flex-col items-start" data-invoice-card={invoice ? "" : undefined}>
+      <div className="w-full max-w-[340px]">{children}</div>
+      <span className="mt-1 px-1 text-[11px] tabular-nums text-ink/45">{meta}</span>
+    </div>
   );
 }
 

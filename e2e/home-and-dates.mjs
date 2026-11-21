@@ -1,5 +1,5 @@
-// Checks the home page's quick add-to-cart on the two style cards, the "pieces left" counts, and that the
-// delivery dates follow the visitor's date (the clock is set to 22 Nov 2026).
+// Checks the home page's two style cards (pieces left, and Add to cart opening the hoodie page with that style
+// picked) and that the delivery dates follow the visitor's date (the clock is set to 22 Nov 2026).
 // usage: node e2e/home-and-dates.mjs [baseUrl] [screenshotDir]
 import { chromium } from "playwright";
 import os from "node:os";
@@ -13,7 +13,8 @@ const check = (ok, label) => {
   if (!ok) failed++;
 };
 
-// 1. Home: each style card says how many are left and adds straight to the cart.
+// 1. Home: each style card says how many are left. Its Add to cart is a link to the hoodie page with that
+//    style picked for every hoodie; sizes and packs are chosen there (no size picker on the card).
 {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errors = [];
@@ -22,17 +23,43 @@ const check = (ok, label) => {
   check(await page.getByText("Only 20 left").first().isVisible(), "Akatsuki card says Only 20 left");
   check(await page.getByText("Only 35 left").first().isVisible(), "Shinobi card says Only 35 left");
 
-  const shinobi = page.locator("article").filter({ has: page.getByRole("heading", { name: "Shinobi" }) });
-  await shinobi.getByRole("button", { name: /^Add to cart/ }).click();
-  await page.waitForTimeout(600);
-  await page.screenshot({ path: `${out}/home-sizes-open.png` });
-  await shinobi.getByRole("button", { name: "Add Shinobi size L to cart" }).click();
+  const cardOf = (style) => page.locator("article").filter({ has: page.getByRole("heading", { name: style, exact: true }) });
+  for (const style of ["Akatsuki", "Shinobi"]) {
+    const add = cardOf(style).getByRole("link", { name: /^Add to cart/ });
+    check((await add.getAttribute("href")) === `/products/akatsukizipup-mask-hoodie?style=${style}`, `${style} card: Add to cart → the hoodie page with ?style=${style}`);
+    check((await cardOf(style).getByRole("button", { name: /size/i }).count()) === 0, `${style} card: no size picker on the card`);
+  }
+  check((await cardOf("Shinobi").getByRole("link", { name: /^Add to cart/ }).textContent()).includes("$63.69"), "the card still shows the price ($63.69)");
+
+  await cardOf("Shinobi").getByRole("link", { name: /^Add to cart/ }).click();
+  await page.waitForURL(`${base}/products/akatsukizipup-mask-hoodie?style=Shinobi`);
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(900); // the picker is set after mount, then scrolled into view
+  const open = page.locator('[role="radio"][aria-checked="true"]').locator("..");
+  const picked = await open.locator('button[aria-pressed="true"]').filter({ hasText: /^(Akatsuki|Shinobi)/ }).allTextContents();
+  check(picked.length === 2 && picked.every((t) => t.startsWith("Shinobi")), `both hoodies of the Duo pack are Shinobi (${picked.map((t) => t.split(/\d/)[0]).join(", ")})`);
+  const inView = await page.evaluate(() => {
+    const r = document.querySelector('[role="radiogroup"][aria-label="Bundle"]').getBoundingClientRect();
+    return window.scrollY > 200 && r.top < window.innerHeight && r.bottom > 0;
+  });
+  check(inView, "the page scrolled down to the packs");
+  await page.screenshot({ path: `${out}/home-card-to-hoodie-page.png` });
+
+  // Pick sizes and add: the cart gets two Shinobi.
+  await open.getByRole("button", { name: "Size M for hoodie 1" }).click();
+  await open.getByRole("button", { name: "Size L for hoodie 2" }).click();
+  await page.getByRole("button", { name: /^Add to cart · / }).click();
   await page.waitForTimeout(1300);
   const drawer = page.getByRole("dialog", { name: "Your cart" });
-  check(await drawer.getByText("Shinobi / L").isVisible(), "picking L on the Shinobi card puts Shinobi / L in the cart");
-  check((await drawer.textContent()).includes("$63.69"), "at the single-hoodie price ($63.69)");
-  await page.screenshot({ path: `${out}/home-quick-add-cart.png` });
-  check(errors.length === 0, `no page errors on home${errors.length ? `: ${errors.join(" | ")}` : ""}`);
+  check(await drawer.getByText("Shinobi / M, Shinobi / L").isVisible(), "adding puts Shinobi / M, Shinobi / L in the cart");
+  await page.evaluate(() => localStorage.clear());
+
+  // A style that isn't sold, or no ?style=: the usual default (Akatsuki).
+  await page.goto(`${base}/products/akatsukizipup-mask-hoodie?style=Hokage`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(500);
+  const def = await page.locator('[role="radio"][aria-checked="true"]').locator("..").locator('button[aria-pressed="true"]').filter({ hasText: /^(Akatsuki|Shinobi)/ }).allTextContents();
+  check(def.length === 2 && def.every((t) => t.startsWith("Akatsuki")), "an unknown ?style= is ignored (Akatsuki stays picked)");
+  check(errors.length === 0, `no page errors on home or the hoodie page${errors.length ? `: ${errors.join(" | ")}` : ""}`);
   await page.close();
 }
 
@@ -51,4 +78,5 @@ const check = (ok, label) => {
 }
 
 await browser.close();
+console.log(failed ? `\n${failed} check(s) failed` : "\nall checks passed");
 process.exit(failed ? 1 : 0);

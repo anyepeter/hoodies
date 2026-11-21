@@ -2,7 +2,7 @@
 // the checkout shows these numbers and POST /api/orders recomputes them the same way, so they always agree.
 // Client-safe (no server imports): the checkout page prices the cart with it too.
 //
-// Cart keys (set by ProductMain, StyleCard and AddOnBuyButton):
+// Cart keys (set by ProductMain and AddOnBuyButton):
 //   bundle:<solo|duo|squad>:<Style> / <Size>[, <Style> / <Size>...]   one pair per hoodie in the pack
 //   addon:<mystery-box|shipping-protection|priority-shipping>
 

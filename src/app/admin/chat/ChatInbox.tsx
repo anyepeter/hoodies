@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { EmptyState, PageHeader, StatusPill, btn } from "@/components/admin/ui";
-import { MESSAGE_MAX, type ChatMessageDTO, type ChatStatus } from "@/lib/chat/shared";
+import { InvoiceReceipt, PaymentCard } from "@/components/chat/OrderCards";
+import { MESSAGE_MAX, type ChatMessageDTO, type ChatStatus, type InvoiceDTO } from "@/lib/chat/shared";
 
 /*
  * Admin → Live chat. Inbox on the left, the open conversation on the right (on a phone: the list, then the
@@ -12,6 +14,10 @@ import { MESSAGE_MAX, type ChatMessageDTO, type ChatStatus } from "@/lib/chat/sh
  *
  * Live: AdminRealtime turns each Pusher ping into a window event "admin:chat.message" (detail.id = the
  * conversation) and this refetches. Safety net: a refresh every 60 s while the tab is visible, and on return.
+ *
+ * Orders live in the chat: an order's invoice shows as a receipt card with the shopper's answer ("is everything
+ * correct?"), a link to the order and "Send payment details" (the form is on the order page, #payment). The
+ * payment details, once sent, show as a highlighted card.
  */
 
 type Row = {
@@ -24,6 +30,7 @@ type Row = {
   lastMessageAt: string;
   createdAt: string;
   lastFrom: "VISITOR" | "ADMIN" | "SYSTEM" | null;
+  lastKind: string | null;
 };
 type Counts = { open: number; closed: number; all: number };
 type Filter = keyof Counts;
@@ -207,7 +214,7 @@ export function ChatInbox() {
                           {c.name && c.email && <span className="block truncate text-[11px] text-zinc-400">{c.email}</span>}
                           <span className="mt-0.5 flex items-center gap-2">
                             <span className={`min-w-0 flex-1 truncate text-[13px] ${unread ? "text-ink" : "text-zinc-500"}`}>
-                              {c.lastFrom === "ADMIN" && <span className="text-zinc-400">You: </span>}
+                              {c.lastFrom === "ADMIN" && c.lastKind !== "INVOICE" && <span className="text-zinc-400">You: </span>}
                               {c.lastMessage || "…"}
                             </span>
                             {unread && (
@@ -488,6 +495,23 @@ function ThreadPane({ id, onBack, onChanged, onGone }: { id: string; onBack: () 
               {newDay && <p className="py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{dayOf(m.createdAt)}</p>}
               {m.sender === "SYSTEM" ? (
                 <p className="text-center text-xs text-zinc-400">{m.body}</p>
+              ) : m.kind === "INVOICE" && m.invoice ? (
+                <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+                  <div className="w-full max-w-sm">
+                    <AdminInvoice invoice={m.invoice} paymentSent={messages.some((x) => x.kind === "PAYMENT" && x.invoice?.orderId === m.invoice?.orderId)} />
+                  </div>
+                  <span className="mt-0.5 px-1 text-[11px] tabular-nums text-zinc-400">{timeOf(m.createdAt)} · Sent automatically with the order</span>
+                </div>
+              ) : m.kind === "PAYMENT" ? (
+                <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+                  <div className="w-full max-w-sm">
+                    <PaymentCard title={m.invoice ? `Payment details sent · ${m.invoice.number}` : "Payment details sent"} body={m.body} />
+                  </div>
+                  <span className="mt-0.5 px-1 text-[11px] tabular-nums text-zinc-400">
+                    {timeOf(m.createdAt)}
+                    {m.id === last?.id && conv && (conv.unreadForVisitor > 0 ? " · Not seen yet" : " · Seen")}
+                  </span>
+                </div>
               ) : (
                 <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
                   <p
@@ -546,5 +570,48 @@ function ThreadPane({ id, onBack, onChanged, onGone }: { id: string; onBack: () 
         <p className="mt-1.5 hidden text-[11px] text-zinc-400 sm:block">Enter to send · Shift + Enter for a new line</p>
       </form>
     </>
+  );
+}
+
+const ANSWER: Record<"waiting" | "confirmed" | "wrong", { text: string; tone: string }> = {
+  waiting: { text: "Waiting for the shopper", tone: "bg-amber-50 text-amber-800 ring-amber-200" },
+  confirmed: { text: "Confirmed ✓", tone: "bg-emerald-50 text-emerald-800 ring-emerald-200" },
+  wrong: { text: "Says something's wrong", tone: "bg-red-50 text-red-800 ring-red-200" },
+};
+
+/** An order's invoice in the thread: the receipt, what the shopper answered, and the next step. */
+function AdminInvoice({ invoice, paymentSent }: { invoice: InvoiceDTO; paymentSent: boolean }) {
+  const answer = ANSWER[invoice.answer ?? "waiting"];
+  const pending = invoice.status === "PENDING";
+  const order = invoice.orderId ? `/admin/orders/${encodeURIComponent(invoice.orderId)}` : null;
+  return (
+    <InvoiceReceipt invoice={invoice}>
+      <div className="space-y-2.5 border-t border-zinc-200 bg-zinc-50 px-4 py-3">
+        <p className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="font-medium text-zinc-500">&ldquo;Is everything correct?&rdquo;</span>
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-semibold ring-1 ring-inset ${answer.tone}`}>{answer.text}</span>
+        </p>
+        {order && (
+          <div className="flex flex-col gap-2">
+            {pending &&
+              (paymentSent ? (
+                <p className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+                  <span className="font-semibold text-emerald-700">Payment details sent ✓</span>
+                  <Link prefetch={false} href={`${order}#payment`} className="font-semibold text-zinc-600 underline-offset-2 hover:text-ink hover:underline">
+                    Send again
+                  </Link>
+                </p>
+              ) : (
+                <Link prefetch={false} href={`${order}#payment`} className={`${btn.primary} w-full`}>
+                  Send payment details
+                </Link>
+              ))}
+            <Link prefetch={false} href={order} className={`${btn.secondary} h-9 w-full`}>
+              Open order {invoice.number}
+            </Link>
+          </div>
+        )}
+      </div>
+    </InvoiceReceipt>
   );
 }

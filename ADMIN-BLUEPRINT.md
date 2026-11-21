@@ -109,3 +109,9 @@ network failure ("We couldn't reach the server. Check your connection and try ag
   Open (low): no global login cap across IPs; stateless sessions can't be revoked one by one (rotate
   ADMIN_SESSION_SECRET); a Vercel Firewall rule on /api/* would stop floods before they cost invocations.
 - [x] e2e: flow 12, home-and-dates 10, checkout 65, chat 70, insights 57 — all passing against `next start`.
+- [x] Order-in-chat (21 Nov 2026, owner's request: "do it the Bourbon / Muh-med way"). Payment rails = Bourbon's
+  (Chime, Zelle, Cash App, Apple Pay, Cryptocurrency 10% off; no details at checkout). Placing an order posts the
+  invoice into the shopper's chat (src/lib/chat/order-chat.ts) with Muh-med's "is everything correct?" + Yes / No;
+  "Order confirmed" page opens the chat (`akz:open-chat`); admin sends payment details from the order page (PAYMENT
+  message). Home style cards link to the hoodie page with `?style=`. e2e: order-to-chat 24, checkout 127,
+  invoice-chat 59, chat 70, insights 57, home-and-dates 17, flow 12.

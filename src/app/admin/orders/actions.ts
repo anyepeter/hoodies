@@ -4,6 +4,8 @@ import type { OrderStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { assertAdmin } from "@/lib/admin-session";
+import { PaymentDetailsError, sendPaymentDetails } from "@/lib/chat/order-chat";
+import { MESSAGE_MAX } from "@/lib/chat/shared";
 import { prisma } from "@/lib/db";
 import { notifyAdmins } from "@/lib/notify";
 import { describeUnits, parseStockTaken } from "@/lib/orders/pricing";
@@ -133,5 +135,38 @@ export async function addOrderNote(input: { id: string; message: string }): Prom
   } catch (err) {
     console.error("[admin/orders] note failed", err);
     return { ok: false, error: "The note couldn't be saved. Try again." };
+  }
+}
+
+const PaymentDetailsInput = z.object({
+  id: z.string().min(1).max(64),
+  body: z
+    .string()
+    .trim()
+    .min(1, "Write the message with the payment details first.")
+    .max(MESSAGE_MAX, `Keep the message under ${MESSAGE_MAX.toLocaleString("en-US")} characters.`),
+});
+
+/**
+ * Sends the payment details for an order into the shopper's chat (the message the admin checked on the order
+ * page). Can be sent again, e.g. after changing an account. The timeline records each send.
+ */
+export async function sendOrderPaymentDetails(input: { id: string; body: string }): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return { ok: false, error: denied };
+  const parsed = PaymentDetailsInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid request." };
+  const { id, body } = parsed.data;
+  try {
+    await sendPaymentDetails(id, body);
+    await prisma.orderEvent.create({ data: { orderId: id, type: "chat", message: "Payment details sent in the chat" } });
+    revalidatePath(`/admin/orders/${id}`);
+    revalidatePath("/admin/orders");
+    notifyAdmins("order.updated", null, { id });
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof PaymentDetailsError) return { ok: false, error: err.message };
+    console.error("[admin/orders] sending payment details failed", err);
+    return { ok: false, error: "The message couldn't be sent. Try again." };
   }
 }

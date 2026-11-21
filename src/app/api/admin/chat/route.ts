@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { requireAdminApi } from "@/lib/admin-session";
+import { INVOICE_COPY } from "@/lib/chat/shared";
 import { prisma } from "@/lib/db";
 import { ok, serverError } from "@/lib/http";
 
@@ -26,7 +27,14 @@ export async function GET(req: NextRequest) {
           lastMessage: true,
           lastMessageAt: true,
           createdAt: true,
-          messages: { orderBy: { createdAt: "desc" }, take: 1, select: { sender: true } },
+          // Who the preview is from. The automatic reply under an invoice answer doesn't count: the preview there
+          // is the shopper's answer ("Yes, all correct"), so it mustn't read "You: …".
+          messages: {
+            where: { NOT: { sender: "ADMIN", body: { in: [INVOICE_COPY.yesReply, INVOICE_COPY.noReply] } } },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { sender: true, kind: true },
+          },
         },
       }),
       prisma.conversation.groupBy({ by: ["status"], _count: { _all: true } }),
@@ -38,6 +46,8 @@ export async function GET(req: NextRequest) {
         lastMessageAt: c.lastMessageAt.toISOString(),
         createdAt: c.createdAt.toISOString(),
         lastFrom: messages[0]?.sender ?? null,
+        // "INVOICE" when the newest thing is an order's invoice (the preview reads "New order #1001 · $x").
+        lastKind: messages[0]?.kind ?? null,
       })),
       counts: { open: count("OPEN"), closed: count("CLOSED"), all: count("OPEN") + count("CLOSED") },
     });

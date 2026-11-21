@@ -5,12 +5,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useCart, type CartLine } from "@/components/cart/CartProvider";
+import { PaymentLogo } from "@/components/checkout/PaymentLogos";
 import { customerSchema } from "@/lib/orders/checkout-schema";
 import { COUNTRIES, isCountryCode, needsPostcode } from "@/lib/orders/countries";
+import { discountCents, ratePercent } from "@/lib/orders/payment-rails";
 import { MAX_LINES, MAX_QTY, moneyCents, priceCart, type PricedCart } from "@/lib/orders/pricing";
+import type { CheckoutPaymentOption as PaymentOption } from "@/lib/orders/queries";
 import { HOODIE } from "@/lib/store";
 
-type PaymentOption = { id: string; name: string; instructions: string };
+/** A payment method's discount as the summary shows it (the server works it out again). */
+type Discount = { label: string; cents: number };
 
 const FIELDS = ["name", "email", "phone", "country", "address1", "address2", "city", "region", "postalCode", "notes", "paymentOptionId"] as const;
 type Field = (typeof FIELDS)[number];
@@ -181,7 +185,11 @@ function CheckoutBody({ lines, paymentOptions, onPlaced }: { lines: CartLine[]; 
   };
 
   const selected = paymentOptions.find((o) => o.id === values.paymentOptionId);
-  const total = moneyCents(cart.totalCents);
+  // Same rule as POST /api/orders (which ignores anything the browser says about money).
+  const discount: Discount | null =
+    selected && selected.discountRate > 0 ? { label: `${selected.name} discount (${ratePercent(selected.discountRate)})`, cents: discountCents(cart.subtotalCents, selected.discountRate) } : null;
+  const totalCents = cart.subtotalCents - (discount?.cents ?? 0) + cart.shippingCents;
+  const total = moneyCents(totalCents);
   const postcodeOptional = isCountryCode(values.country) && !needsPostcode(values.country);
   const err = (f: Field) => ({ "aria-invalid": Boolean(errors[f]), "aria-describedby": errors[f] ? `${f}-error` : undefined });
 
@@ -342,24 +350,32 @@ function CheckoutBody({ lines, paymentOptions, onPlaced }: { lines: CartLine[]; 
                     return (
                       <label
                         key={o.id}
-                        className={`block cursor-pointer rounded-xl border-2 p-4 transition ${on ? "border-brand bg-brand/[0.03]" : "border-black/10 hover:border-black/25"}`}
+                        data-rail={o.key ?? "other"}
+                        className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition ${on ? "border-brand bg-brand/[0.03]" : "border-black/10 hover:border-black/25"}`}
                       >
-                        <span className="flex items-center gap-3">
-                          <input
-                            type="radio"
-                            name="paymentOptionId"
-                            value={o.id}
-                            checked={on}
-                            onChange={() => set("paymentOptionId", o.id)}
-                            className="h-[18px] w-[18px] accent-brand"
-                          />
-                          <span className="text-[15px] font-semibold">{o.name}</span>
-                        </span>
-                        {on && (
-                          <span className="mt-2 block whitespace-pre-line pl-[30px] text-[13px] leading-relaxed text-ink/65">
-                            {o.instructions.replaceAll("{total}", total).replaceAll("{order}", "your order number")}
+                        <input
+                          type="radio"
+                          name="paymentOptionId"
+                          value={o.id}
+                          checked={on}
+                          onChange={() => set("paymentOptionId", o.id)}
+                          className="h-[18px] w-[18px] shrink-0 accent-brand"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="text-[15px] font-semibold">{o.name}</span>
+                            {o.discountRate > 0 && (
+                              <span className="rounded-md bg-brand px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">{ratePercent(o.discountRate)} off</span>
+                            )}
                           </span>
-                        )}
+                          {o.detail && <span className="mt-0.5 block text-[13px] leading-snug text-ink/60">{o.detail}</span>}
+                          {on && o.discountRate > 0 && (
+                            <span className="mt-1 block text-[13px] font-semibold text-brand">
+                              {ratePercent(o.discountRate)} off your items: −{moneyCents(discountCents(cart.subtotalCents, o.discountRate))}
+                            </span>
+                          )}
+                        </span>
+                        <PaymentLogo paymentKey={o.key} name={o.name} />
                       </label>
                     );
                   })}
@@ -371,9 +387,6 @@ function CheckoutBody({ lines, paymentOptions, onPlaced }: { lines: CartLine[]; 
                 )}
               </fieldset>
             )}
-            <p className="text-[13px] text-ink/60">
-              No card is taken here. After you place the order you get the exact details to pay {selected ? `by ${selected.name}` : ""}, and we ship as soon as the payment arrives.
-            </p>
           </FormSection>
 
           {/* Honeypot: hidden from people and screen readers; bots fill every field. */}
@@ -387,7 +400,7 @@ function CheckoutBody({ lines, paymentOptions, onPlaced }: { lines: CartLine[]; 
             Desktop: both in one sticky column on the right. */}
         <aside className="contents md:sticky md:top-24 md:block md:space-y-4">
           <div className="order-1 md:order-none">
-            <Summary cart={cart} onEdit={() => setOpen(true)} onRemoveInvalid={() => cart.invalid.forEach(remove)} />
+            <Summary cart={cart} discount={discount} totalCents={totalCents} onEdit={() => setOpen(true)} onRemoveInvalid={() => cart.invalid.forEach(remove)} />
           </div>
           <div className="order-3 space-y-4 md:order-none">
             {formError && (
@@ -413,6 +426,12 @@ function CheckoutBody({ lines, paymentOptions, onPlaced }: { lines: CartLine[]; 
             >
               {sending ? "Placing your order…" : `Place order · ${total}`}
             </button>
+            <p className="flex items-start justify-center gap-2 text-center text-[13px] font-medium leading-snug text-ink/75">
+              <svg viewBox="0 0 24 24" className="mt-px h-4 w-4 shrink-0 text-brand" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12Z" strokeLinejoin="round" />
+              </svg>
+              <span>You&apos;ll get your invoice and the payment details in the chat right after you order.</span>
+            </p>
             <p className="text-center text-[12px] leading-relaxed text-ink/55">This store is a design preview: your order is recorded but nothing is charged or shipped.</p>
           </div>
         </aside>
@@ -448,7 +467,19 @@ function FormField({ id, label, optional, hint, error, children }: { id: string;
   );
 }
 
-function Summary({ cart, onEdit, onRemoveInvalid }: { cart: PricedCart; onEdit: () => void; onRemoveInvalid: () => void }) {
+function Summary({
+  cart,
+  discount,
+  totalCents,
+  onEdit,
+  onRemoveInvalid,
+}: {
+  cart: PricedCart;
+  discount: Discount | null;
+  totalCents: number;
+  onEdit: () => void;
+  onRemoveInvalid: () => void;
+}) {
   return (
     <div className="rounded-2xl bg-soft p-4 md:p-5">
       <div className="flex items-center justify-between">
@@ -490,19 +521,25 @@ function Summary({ cart, onEdit, onRemoveInvalid }: { cart: PricedCart; onEdit: 
           <dt className="text-ink/65">Subtotal</dt>
           <dd>{moneyCents(cart.subtotalCents)}</dd>
         </div>
+        {discount && discount.cents > 0 && (
+          <div className="flex justify-between font-semibold text-brand" data-testid="payment-discount">
+            <dt>{discount.label}</dt>
+            <dd>−{moneyCents(discount.cents)}</dd>
+          </div>
+        )}
         <div className="flex justify-between">
           <dt className="text-ink/65">Shipping</dt>
           <dd className="font-semibold">Free</dd>
         </div>
-        {cart.savingCents > 0 && (
+        {cart.savingCents + (discount?.cents ?? 0) > 0 && (
           <div className="flex justify-between font-semibold text-brand">
             <dt>You save</dt>
-            <dd>{moneyCents(cart.savingCents)}</dd>
+            <dd>{moneyCents(cart.savingCents + (discount?.cents ?? 0))}</dd>
           </div>
         )}
         <div className="flex items-baseline justify-between border-t border-black/5 pt-2">
           <dt className="text-[15px] font-semibold">Total</dt>
-          <dd className="text-[22px] font-bold tracking-tight">{moneyCents(cart.totalCents)}</dd>
+          <dd className="text-[22px] font-bold tracking-tight">{moneyCents(totalCents)}</dd>
         </div>
       </dl>
       <p className="mt-1 text-[12px] text-ink/50">Taxes included. Prices in US dollars.</p>

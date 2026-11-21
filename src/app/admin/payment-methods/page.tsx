@@ -14,7 +14,17 @@ async function load(): Promise<PaymentRow[]> {
     prisma.order.groupBy({ by: ["paymentOptionId"], where: { paymentOptionId: { not: null } }, _count: { _all: true } }),
   ]);
   const used = new Map(counts.map((c) => [c.paymentOptionId, c._count._all]));
-  return options.map((o) => ({ id: o.id, name: o.name, instructions: o.instructions, details: o.details ?? "", active: o.active, orders: used.get(o.id) ?? 0 }));
+  return options.map((o) => ({
+    id: o.id,
+    name: o.name,
+    key: o.key ?? "",
+    detail: o.detail ?? "",
+    discountPercent: Math.round(Number(o.discountRate) * 100),
+    details: o.details ?? "",
+    instructions: o.instructions,
+    active: o.active,
+    orders: used.get(o.id) ?? 0,
+  }));
 }
 
 export default async function PaymentMethodsPage() {
@@ -26,7 +36,7 @@ export default async function PaymentMethodsPage() {
 
   return (
     <>
-      <PageHeader title="Payment methods" subtitle="How customers can pay. They pick one at checkout and see its instructions on their order page and invoice." />
+      <PageHeader title="Payment methods" subtitle="The ways to pay shown at checkout. The shopper picks one; once they confirm their invoice in the chat, you send that method's message from the order page." />
       {rows ? (
         <PaymentMethodsClient rows={rows} />
       ) : (

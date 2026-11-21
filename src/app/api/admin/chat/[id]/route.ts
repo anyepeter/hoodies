@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/admin-session";
 import { deviceLabel } from "@/lib/chat/device";
+import { withInvoices } from "@/lib/chat/order-chat";
 import { messageDTO, pingConversation } from "@/lib/chat/server";
 import { CONVERSATION_ID, MESSAGE_MAX, previewOf } from "@/lib/chat/shared";
 import { prisma } from "@/lib/db";
@@ -12,7 +13,8 @@ export const dynamic = "force-dynamic";
 
 /*
  * One conversation, for the admin.
- *   GET    → visitor info + messages. Opening it marks it read (unreadForAdmin = 0) and refreshes the badges.
+ *   GET    → visitor info + messages (invoice / payment cards attached). Opening it marks it read
+ *            (unreadForAdmin = 0) and refreshes the badges.
  *   POST   → reply { message }. The visitor's widget is pinged and shows it.
  *   PATCH  → { status: "OPEN" | "CLOSED" }
  *   DELETE → removes the conversation and its messages for good.
@@ -49,7 +51,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
         unreadForVisitor: true,
         createdAt: true,
         lastMessageAt: true,
-        messages: { orderBy: { createdAt: "desc" }, take: 500, select: { id: true, sender: true, body: true, createdAt: true } },
+        messages: { orderBy: { createdAt: "desc" }, take: 500, select: { id: true, sender: true, body: true, createdAt: true, kind: true, orderId: true } },
       },
     });
     if (!conv) return notFound();
@@ -68,7 +70,8 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
         createdAt: conv.createdAt.toISOString(),
         lastMessageAt: conv.lastMessageAt.toISOString(),
       },
-      messages: messages.reverse().map(messageDTO),
+      // Invoice / payment cards carry the order id, for the links into the admin's order page.
+      messages: await withInvoices(messages.reverse(), { admin: true }),
       cleared,
     });
   } catch (err) {

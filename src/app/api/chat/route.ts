@@ -15,15 +15,17 @@ import {
 import { EMAIL_MAX, MESSAGE_MAX, NAME_MAX, previewOf } from "@/lib/chat/shared";
 import { clientIp, fail, ok, rateLimit, readJson, sameOrigin, serverError } from "@/lib/http";
 import { notifyAdmins } from "@/lib/notify";
+import { visitorThread } from "./thread";
 
 export const dynamic = "force-dynamic";
 
 /*
  * The visitor's side of live chat.
- *   GET  /api/chat          → my conversation + its messages (by cookie). Marks the replies read.
+ *   GET  /api/chat          → my conversation + its messages (by cookie), invoice/payment cards attached. Marks the
+ *                             replies read.
  *   GET  /api/chat?peek=1   → my conversation's unread count only (for the bubble badge). Marks nothing.
  *   POST /api/chat          → start a conversation with a first message; sets the akz_chat cookie.
- * Posting further messages: POST /api/chat/messages.
+ * Posting further messages: POST /api/chat/messages. Answering an invoice's question: POST /api/chat/invoice.
  */
 
 const StartSchema = z.object({
@@ -50,14 +52,7 @@ export async function GET(req: NextRequest) {
     }
     if (req.nextUrl.searchParams.get("peek") === "1") return ok({ conversation: visitorConversationDTO(conv), messages: [] });
 
-    const latest = await prisma.chatMessage.findMany({
-      where: { conversationId: conv.id },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-      select: { id: true, sender: true, body: true, createdAt: true },
-    });
-    if (conv.unreadForVisitor > 0) await prisma.conversation.update({ where: { id: conv.id }, data: { unreadForVisitor: 0 } });
-    return ok({ conversation: visitorConversationDTO({ ...conv, unreadForVisitor: 0 }), messages: latest.reverse().map(messageDTO) });
+    return ok(await visitorThread(conv));
   } catch (err) {
     return serverError("chat:get", err);
   }
@@ -98,7 +93,7 @@ export async function POST(req: NextRequest) {
         lastMessageAt: now,
         messages: { create: { sender: "VISITOR", body: message, createdAt: now } },
       },
-      select: { id: true, status: true, unreadForVisitor: true, messages: { select: { id: true, sender: true, body: true, createdAt: true } } },
+      select: { id: true, status: true, unreadForVisitor: true, messages: { select: { id: true, sender: true, body: true, createdAt: true, kind: true } } },
     });
 
     notifyAdmins(

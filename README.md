@@ -11,6 +11,14 @@ client what a custom build can do.
 The site is marked noindex (and robots.txt disallows everything) because it's a design preview of a real store. `git checkout clone` to see it.
 - **`main`**: the improved version built on top of it (below).
 
+**How ordering works (same as the owner's Bourbon and Muh-med stores):** the shopper picks a payment method at
+checkout (Chime, Zelle, Cash App, Apple Pay, or Cryptocurrency at 10% off; no account details are shown there).
+Placing the order creates the invoice and posts it into the shopper's chat with "Are your items, delivery address
+and contact details all correct?" and two buttons. The "Order confirmed" page opens that chat by itself. When
+they tap "Yes, all correct", the admin gets a notification and sends the payment details from the order page
+(Admin → Orders → the order → "Send payment details"), and they appear in the shopper's chat. On the home page,
+a style card's "Add to cart" opens the hoodie page with that style picked.
+
 It has a real backend now (Neon Postgres via Prisma): orders with manual payment methods and invoices, stock
 that goes down when someone orders, live chat (Pusher), phone notifications for the admin, analytics,
 subscribers and contact messages. Checkout carries one line saying it's a design preview: orders are recorded
@@ -25,7 +33,7 @@ but nothing is charged, because the site uses another company's brand.
 | Dashboard | Revenue, orders, awaiting payment, visitors, conversion, stock, unread chats and messages |
 | Orders | Status tabs, search, detail with Mark paid (with reference) / shipped / delivered / cancel / refund, timeline, invoice. Cancelling puts stock back. Unpaid orders cancel themselves after 48 hours |
 | Products & stock | Pieces left per style (Akatsuki, Shinobi), +/− and set, sold and held counts |
-| Payment methods | What checkout offers and the instructions on the order page and invoice (`{order}`, `{total}`) |
+| Payment methods | Chime, Zelle, Cash App, Apple Pay, Cryptocurrency: logo, short line, discount, your account details and the chat message sent for each order (`{order}`, `{total}`, `{details}`) |
 | Live chat | Inbox for the chat bubble on the store; replies arrive live on the shopper's screen |
 | Messages | The contact form |
 | Subscribers | Newsletter sign-ups, CSV export |
@@ -96,7 +104,9 @@ npm run db:seed            # stock 20/35 + two example payment methods (only fil
 Checks (run against a running server):
 
 ```bash
+node --env-file=.env.local e2e/order-to-chat.mjs http://localhost:3200   # the whole path: card → cart → checkout → invoice in chat → confirm → payment details
 node --env-file=.env.local e2e/checkout.mjs http://localhost:3200   # checkout, orders, stock, payment methods, admin
+node --env-file=.env.local e2e/invoice-chat.mjs http://localhost:3200   # invoice + payment cards in the chat, answers, admin view
 node --env-file=.env.local e2e/chat.mjs http://localhost:3200       # live chat both ways, Pusher auth, push, layout
 node --env-file=.env.local e2e/insights.mjs http://localhost:3200   # tracking, analytics, newsletter, contact, dashboard
 node e2e/flow.mjs http://localhost:3200      # walks the buying flow: 12 checks
