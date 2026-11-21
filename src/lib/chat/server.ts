@@ -60,8 +60,10 @@ export async function visitorIdFromCookie(): Promise<string | null> {
   return v && /^[A-Za-z0-9_-]{8,64}$/.test(v) ? v : null;
 }
 
-export function messageDTO(m: { id: string; sender: ChatSender; body: string; createdAt: Date }): ChatMessageDTO {
-  return { id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt.toISOString() };
+/** Plain text message → DTO. For lists that may hold invoice/payment messages use withInvoices() (order-chat.ts). */
+export function messageDTO(m: { id: string; sender: ChatSender; body: string; createdAt: Date; kind?: string }): ChatMessageDTO {
+  const kind = m.kind === "INVOICE" || m.kind === "PAYMENT" ? m.kind : "TEXT";
+  return { id: m.id, sender: m.sender, body: m.body, createdAt: m.createdAt.toISOString(), kind };
 }
 
 export function visitorConversationDTO(c: { id: string; status: ChatStatus; unreadForVisitor: number }): VisitorConversationDTO {

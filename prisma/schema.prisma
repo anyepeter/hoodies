@@ -60,6 +60,14 @@ model Order {
   paymentMethod       String  // snapshot of the method's name at order time
   paymentInstructions String  @db.Text // snapshot, so editing a method later never rewrites old invoices
   paymentReference    String? // what the admin recorded when confirming payment
+  paymentKey          String? // the method's key at order time (logo), e.g. "cash-app"
+  paymentDiscount     Decimal @default(0) @db.Decimal(10, 2) // what the method's discount took off
+
+  // The chat this order's invoice was posted in (the shopper's own conversation), and what happened there.
+  conversationId       String?
+  invoiceAnswer        String? // "confirmed" | "wrong", from the buttons under the invoice
+  invoiceAnsweredAt    DateTime?
+  paymentDetailsSentAt DateTime? // when the admin sent the payment details in the chat
 
   // Money, all USD, recomputed on the server from src/lib/store.ts (never trusted from the browser)
   compareAtTotal Decimal @db.Decimal(10, 2) // what it would cost at full price
@@ -87,6 +95,7 @@ model Order {
   @@index([status, createdAt])
   @@index([createdAt])
   @@index([email])
+  @@index([conversationId])
 }
 
 model OrderItem {
@@ -132,6 +141,12 @@ model PaymentOption {
   details      String?  @db.Text
   active       Boolean  @default(true)
   sortOrder    Int      @default(0)
+  /// Which logo and built-in wording it uses: "chime" | "zelle" | "cash-app" | "apple-pay" | "crypto" (null = other).
+  key          String?  @unique
+  /// The short line under the name at checkout, e.g. "Pay from your Chime account via Pay Anyone."
+  detail       String?
+  /// Discount for paying this way, 0.1 = 10% off (crypto). Applied on the server at order time.
+  discountRate Decimal  @default(0) @db.Decimal(4, 3)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -218,9 +233,16 @@ model ChatMessage {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         ChatSender
   body           String       @db.Text
+  /// "TEXT" (a normal message), "INVOICE" (an order's invoice card, with the "is everything correct?" buttons)
+  /// or "PAYMENT" (the payment details the admin sent for an order).
+  kind           String       @default("TEXT")
+  orderId        String?
+  /// For INVOICE: { answer: "confirmed" | "wrong" } once the shopper tapped a button.
+  meta           Json?
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
+  @@index([orderId])
 }
 
 // ---- Admin devices (web push) ---------------------------------------------------------------------------
