@@ -185,3 +185,6 @@ export function money(value: number): string {
 }
 
 export const SAVE_PERCENT = Math.round((1 - HOODIE.price / HOODIE.compareAt) * 100); // 28
+
+/** At or below this many pieces, a style shows as "low stock" in the admin. */
+export const LOW_STOCK = 5;

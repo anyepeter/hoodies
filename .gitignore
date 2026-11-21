@@ -42,3 +42,6 @@ next-env.d.ts
 
 # screenshots
 /e2e/out
+
+# extra dev-server build folders (NEXT_DIST_DIR)
+/.next-*/

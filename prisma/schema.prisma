@@ -1,0 +1,286 @@
+// Hoodies (AkatsukiZipUp rebuild): orders, stock, payment methods, live chat, push devices,
+// visitor analytics, subscribers, contact messages. Neon Postgres via Prisma, applied with `prisma db push`.
+// The product catalogue itself (hoodie, bundles, add-ons, prices) lives in src/lib/store.ts; only what
+// changes at runtime (stock, orders...) is in the database.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---- Stock ----------------------------------------------------------------------------------------------
+
+/// Pieces left per style ("Akatsuki", "Shinobi"). Decremented when an order is placed, restored when a
+/// pending/paid order is cancelled. Always change it with a conditional UPDATE (stock >= n) so two orders
+/// can never sell the same last piece.
+model StyleStock {
+  style     String   @id
+  stock     Int
+  updatedAt DateTime @updatedAt
+}
+
+// ---- Orders ---------------------------------------------------------------------------------------------
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model Order {
+  id     String      @id @default(cuid())
+  /// Shown to people as #1001, #1002... (1000 + number).
+  number Int         @unique @default(autoincrement())
+  /// Unguessable secret for the customer's order + invoice page (/order/[token]).
+  token  String      @unique
+  status OrderStatus @default(PENDING)
+
+  // Customer
+  name       String
+  email      String
+  phone      String?
+  country    String
+  address1   String
+  address2   String?
+  city       String
+  region     String?
+  postalCode String
+  notes      String? @db.Text
+
+  // Payment (manual: the customer pays with the chosen method, the admin confirms it)
+  paymentOptionId     String?
+  paymentMethod       String  // snapshot of the method's name at order time
+  paymentInstructions String  @db.Text // snapshot, so editing a method later never rewrites old invoices
+  paymentReference    String? // what the admin recorded when confirming payment
+
+  // Money, all USD, recomputed on the server from src/lib/store.ts (never trusted from the browser)
+  compareAtTotal Decimal @db.Decimal(10, 2) // what it would cost at full price
+  subtotal       Decimal @db.Decimal(10, 2) // what the items cost
+  shipping       Decimal @default(0) @db.Decimal(10, 2)
+  total          Decimal @db.Decimal(10, 2)
+  currency       String  @default("USD")
+
+  /// Units taken from StyleStock, e.g. {"Akatsuki": 2, "Shinobi": 1}. Used to put stock back on cancel.
+  stockTaken    Json
+  stockRestored Boolean @default(false)
+
+  visitorId String?
+
+  paidAt      DateTime?
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items  OrderItem[]
+  events OrderEvent[]
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@index([email])
+}
+
+model OrderItem {
+  id       String  @id @default(cuid())
+  orderId  String
+  order    Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind     String // "bundle" | "addon"
+  sku      String // bundle id ("solo" | "duo" | "squad") or add-on id
+  title    String
+  detail   String? // "Akatsuki / M, Shinobi / L"
+  image    String
+  quantity Int
+
+  unitPrice      Decimal  @db.Decimal(10, 2)
+  unitCompareAt  Decimal? @db.Decimal(10, 2)
+  lineTotal      Decimal  @db.Decimal(10, 2)
+  sortOrder      Int      @default(0)
+
+  @@index([orderId])
+}
+
+/// Every change to an order, in order: created, status changes, payment confirmed, notes. The audit trail.
+model OrderEvent {
+  id         String       @id @default(cuid())
+  orderId    String
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type       String // "created" | "status" | "payment" | "note" | "stock"
+  fromStatus OrderStatus?
+  toStatus   OrderStatus?
+  message    String?      @db.Text
+  createdAt  DateTime     @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+/// A way to pay, managed in the admin and shown at checkout and on the invoice.
+model PaymentOption {
+  id           String   @id @default(cuid())
+  name         String // "Bank transfer", "PayPal"...
+  /// What the customer should do. May use {order} and {total}, filled in per order.
+  instructions String   @db.Text
+  /// Account details (IBAN, PayPal email...). Shown with the instructions.
+  details      String?  @db.Text
+  active       Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ---- Reach ----------------------------------------------------------------------------------------------
+
+enum SubscriberStatus {
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+model Subscriber {
+  id        String           @id @default(cuid())
+  email     String           @unique
+  status    SubscriberStatus @default(SUBSCRIBED)
+  source    String? // "footer", "checkout"...
+  visitorId String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([status, createdAt])
+}
+
+enum MessageStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+/// The contact form on /pages/contact.
+model ContactMessage {
+  id        String        @id @default(cuid())
+  name      String?
+  email     String
+  phone     String?
+  body      String        @db.Text
+  status    MessageStatus @default(UNREAD)
+  visitorId String?
+  createdAt DateTime      @default(now())
+
+  @@index([status, createdAt])
+}
+
+// ---- Live chat ------------------------------------------------------------------------------------------
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+enum ChatSender {
+  VISITOR
+  ADMIN
+  SYSTEM
+}
+
+model Conversation {
+  id String @id @default(cuid())
+  /// Secret the visitor's browser holds (cookie). Required to read or post in this conversation.
+  visitorToken String             @unique
+  name         String?
+  email        String?
+  status       ConversationStatus @default(OPEN)
+  visitorId    String?
+  pagePath     String? // where they started the chat
+  userAgent    String?            @db.Text
+
+  unreadForAdmin   Int      @default(0)
+  unreadForVisitor Int      @default(0)
+  lastMessageAt    DateTime @default(now())
+  lastMessage      String? // preview for the inbox
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  messages ChatMessage[]
+
+  @@index([lastMessageAt])
+  @@index([status, lastMessageAt])
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         ChatSender
+  body           String       @db.Text
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// ---- Admin devices (web push) ---------------------------------------------------------------------------
+
+/// A browser/phone where the admin turned on notifications. Pruned when the push service answers 404/410.
+model PushSubscription {
+  id         String    @id @default(cuid())
+  endpoint   String    @unique @db.Text
+  p256dh     String    @db.Text
+  auth       String    @db.Text
+  userAgent  String?   @db.Text
+  label      String? // "iPhone", "Chrome on Linux"
+  failures   Int       @default(0)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+// ---- Analytics ------------------------------------------------------------------------------------------
+
+/// One browser (cookie). Geo from Vercel's request headers.
+model Visitor {
+  id          String   @id // the visitor cookie (UUID)
+  country     String?
+  countryCode String?
+  region      String?
+  city        String?
+  userAgent   String?  @db.Text
+  device      String? // "mobile" | "tablet" | "desktop"
+  referrer    String? // first external referrer host
+  email       String? // set once they subscribe, order or chat with an email
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  pageViews PageView[]
+
+  @@index([firstSeenAt])
+  @@index([lastSeenAt])
+}
+
+model PageView {
+  id         String   @id @default(cuid())
+  visitorId  String
+  visitor    Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  path       String
+  referrer   String?
+  /// Client-made id so the "time on page" beacon can find this exact view.
+  viewId     String?  @unique
+  durationMs Int?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([path, createdAt])
+  @@index([visitorId, createdAt])
+}
+
+// ---- Abuse protection -----------------------------------------------------------------------------------
+
+/// Fixed-window counters for rate limits (login, orders, chat, forms). Key like "login:203.0.113.9".
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+}
