@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ProductMain } from "@/components/product/ProductMain";
+import { KineticBands } from "@/components/sections/KineticBands";
 import { CtaBand, FaqSection, FeatureRows, JoinSection, ReviewsTicker, ReviewWall, SaleTicker } from "@/components/sections/ProductSections";
 import { HOODIE } from "@/lib/store";
 
@@ -37,8 +38,9 @@ export default function HoodiePage() {
         <ReviewsTicker />
       </div>
       <FeatureRows />
-      <SaleTicker />
+      <KineticBands />
       <JoinSection />
+      <SaleTicker />
       <ReviewWall />
       <FaqSection />
       <CtaBand />

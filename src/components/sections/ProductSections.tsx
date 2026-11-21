@@ -24,7 +24,7 @@ export function FeatureRows() {
           <div key={f.title} className="grid items-center gap-6 md:grid-cols-12 md:gap-12">
             <Reveal className={`md:col-span-7 ${i % 2 ? "md:order-2" : ""}`}>
               <div className="group relative aspect-[5/4] overflow-hidden rounded-3xl bg-soft">
-                <Image src={f.image} alt={f.alt} fill sizes="(min-width: 768px) 58vw, 100vw" className="object-cover transition-transform duration-[1.2s] ease-out group-hover:scale-105" />
+                <Image src={f.image} alt={f.alt} fill sizes="(min-width: 768px) 58vw, 100vw" className="drift object-cover" />
                 <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-[12px] font-bold backdrop-blur">
                   0{i + 1}
                 </span>
@@ -70,7 +70,7 @@ export function JoinSection() {
   return (
     <section className="mx-auto grid max-w-[1400px] items-center gap-8 px-4 py-14 md:grid-cols-2 md:gap-16 md:px-12 md:py-24">
       <Reveal className="relative">
-        <AutoplayVideo src={JOIN.video} poster={JOIN.poster} className="aspect-[4/5] w-full rounded-3xl object-cover shadow-[0_30px_60px_-30px_rgba(18,18,18,0.5)]" />
+        <AutoplayVideo src={JOIN.video} poster={JOIN.poster} className="zoom-in aspect-[4/5] w-full rounded-3xl object-cover shadow-[0_30px_60px_-30px_rgba(18,18,18,0.5)]" />
         <span className="absolute -bottom-4 right-4 rounded-2xl bg-white px-4 py-3 shadow-xl md:-right-6">
           <Stars className="h-3.5 w-3.5" />
           <span className="mt-1 block text-[13px] font-semibold">Rated 4.9/5</span>
@@ -90,11 +90,11 @@ export function JoinSection() {
 
 export function SaleTicker() {
   return (
-    <div className="bg-ink py-3 text-white">
+    <div className="bg-brand py-3 text-white">
       <Marquee speed={28} gap="gap-16">
         {SALE_TICKER.map((t) => (
           <span key={t} className="flex items-center gap-16 whitespace-nowrap text-[14px] font-bold tracking-wide">
-            {t} <span className="text-brand">✦</span>
+            {t} <span className="text-white/50">✦</span>
           </span>
         ))}
       </Marquee>

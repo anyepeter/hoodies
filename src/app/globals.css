@@ -161,6 +161,70 @@ dialog.viewer[open] {
 .marquee-track {
   animation: marquee linear infinite;
 }
+.marquee-reverse {
+  animation-direction: reverse;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+/* Hollow letters for the crossing banner */
+.outline-text {
+  color: transparent;
+  -webkit-text-stroke: 1.5px #fff;
+}
+
+/* The floating "Shop the hoodie" button slides up once, then a soft ring pulses out of it */
+.floating-shop {
+  animation: dock 0.7s cubic-bezier(0.2, 0.9, 0.25, 1.2) 0.6s both;
+}
+@keyframes dock {
+  from {
+    opacity: 0;
+    transform: translateY(120%) scale(0.9);
+  }
+}
+.pulse-ring {
+  animation: pulse-ring 2.8s ease-out 2s infinite;
+}
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(167 3 23 / 0.45);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 16px rgb(167 3 23 / 0);
+  }
+}
+
+/* Scroll-driven motion (Chrome, Edge, Safari 26+): photos drift and zoom as they cross the screen.
+   Browsers without it simply show them still. */
+@supports (animation-timeline: view()) {
+  .drift {
+    animation: drift linear both;
+    animation-timeline: view();
+    animation-range: cover 0% cover 100%;
+  }
+  @keyframes drift {
+    from {
+      transform: translateY(-6%) scale(1.12);
+    }
+    to {
+      transform: translateY(6%) scale(1.12);
+    }
+  }
+  .zoom-in {
+    animation: zoom-in linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 45%;
+  }
+  @keyframes zoom-in {
+    from {
+      transform: scale(0.88);
+      border-radius: 3rem;
+    }
+  }
+}
 
 /* Fade blocks up as they scroll in */
 .reveal {
@@ -198,7 +262,11 @@ dialog.modal[open] {
   .shine,
   .hero-in,
   .float,
-  .page-in {
+  .page-in,
+  .floating-shop,
+  .pulse-ring,
+  .drift,
+  .zoom-in {
     animation: none;
   }
   html {

@@ -3,6 +3,7 @@ import { Poppins } from "next/font/google";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { CartProvider } from "@/components/cart/CartProvider";
 import { BackToTop } from "@/components/layout/BackToTop";
+import { FloatingShop } from "@/components/layout/FloatingShop";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { PromoBar } from "@/components/layout/PromoBar";
@@ -19,6 +20,9 @@ export const metadata: Metadata = {
   title: { default: "AkatsukiZipUp: the Akatsuki Mask Hoodie", template: "%s – AkatsukiZipUp" },
   description: "The zip-up hoodie with the red clouds and a built-in mask. Akatsuki or Shinobi, S to 2XL. Free worldwide shipping.",
   openGraph: { siteName: "AkatsukiZipUp", type: "website", images: [{ url: "/store/akatsuki-front.webp", width: 1600, height: 1600 }] },
+  // A design preview of someone else's live store: keep it out of search results so it never competes
+  // with (or passes for) the real one.
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {
@@ -39,6 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             {children}
           </main>
           <Footer />
+          <FloatingShop />
           <CartDrawer />
           <BackToTop />
         </CartProvider>

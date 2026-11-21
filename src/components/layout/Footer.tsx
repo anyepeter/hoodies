@@ -45,7 +45,7 @@ export function Footer() {
         </section>
 
         <div className="border-t border-white/15">
-          <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-center gap-x-2 gap-y-2 px-6 py-6 text-[11px] text-white/80">
+          <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-center gap-x-2 gap-y-2 px-6 pb-28 pt-6 text-[11px] text-white/80">
             <span>© 2026, {STORE_NAME}</span>
             {FOOTER_LINKS.map((l) => (
               <span key={l.href} className="flex items-center gap-2">

@@ -4,7 +4,11 @@ A rebuild of the AkatsukiZipUp store (akatsukizipup.com) in Next.js 16 + Tailwin
 client what a custom build can do.
 
 - **Tag `clone`**: the faithful copy. Same pages, photos, video, wording, prices, colours (#A70317) and
-  Poppins type as the live Shopify store on 21 Nov 2026 (prices shown in US dollars: $57.95, was $80.95). `git checkout clone` to see it.
+  Poppins type as the live Shopify store on 21 Nov 2026. Prices are the store's euro prices converted to US
+  dollars at the ECB rate of 20 Nov 2026 (1 EUR = 1.099 USD): $63.69, was $88.96. The rate is one constant,
+  `EUR_TO_USD` in `src/lib/store.ts`.
+
+The site is marked noindex (and robots.txt disallows everything) because it's a design preview of a real store. `git checkout clone` to see it.
 - **`main`**: the improved version built on top of it (below).
 
 This is a demo: there is no payment provider, so "Check out" explains that rather than taking an order, and
@@ -26,12 +30,12 @@ Same brand, same photos and words. These are the changes, and why each one matte
 
 **Buying is clearer**
 - Price, compare-at price and "Save 28%" are next to the title. The original only shows prices inside the bundle cards.
-- Each bundle shows the saving in dollars and the price per hoodie ("Save $57.59 · $52.16 each").
+- Each bundle shows the saving in dollars and the price per hoodie ("Save $63.28 · $57.32 each").
 - Style is picked with photo swatches and size with buttons, not dropdowns. You can mix Akatsuki and Shinobi
   in a pack.
 - No size is pre-selected. The original defaults everyone to S, which is how wrong sizes get ordered.
   Add-to-cart asks for a size if one is missing.
-- The button shows the running total ("Add to cart · $104.31"). The product photo flies into the cart, then
+- The button shows the running total ("Add to cart · $114.64"). The product photo flies into the cart, then
   the cart opens.
 - The sticky bar at the bottom shows the pack you picked and its real total. The original always shows the
   single-hoodie price.

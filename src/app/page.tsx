@@ -1,6 +1,7 @@
 import { Perks } from "@/components/product/Perks";
 import { Hero, StylesSpotlight } from "@/components/sections/Hero";
-import { CtaBand, FaqSection, FeatureRows, ReviewsTicker, ReviewWall } from "@/components/sections/ProductSections";
+import { KineticBands } from "@/components/sections/KineticBands";
+import { CtaBand, FaqSection, FeatureRows, ReviewsTicker, ReviewWall, SaleTicker } from "@/components/sections/ProductSections";
 
 export default function Home() {
   return (
@@ -10,9 +11,11 @@ export default function Home() {
         <Perks />
       </div>
       <StylesSpotlight />
+      <KineticBands />
       <FeatureRows />
       <ReviewsTicker />
       <ReviewWall />
+      <SaleTicker />
       <FaqSection />
       <CtaBand />
     </>

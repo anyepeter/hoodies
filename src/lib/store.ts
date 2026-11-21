@@ -3,6 +3,11 @@
 
 export const STORE_NAME = "AkatsukiZipUp";
 
+/* The original store prices in euros. Prices here are those euro figures converted to US dollars at the
+   European Central Bank reference rate of 20 Nov 2026 (1 EUR = 1.099 USD). To re-price, change the rate. */
+export const EUR_TO_USD = 1.099;
+const usd = (eur: number) => Math.round(eur * EUR_TO_USD * 100) / 100;
+
 export type Style = "Akatsuki" | "Shinobi";
 export const STYLES: Style[] = ["Akatsuki", "Shinobi"];
 export const SIZES = ["S", "M", "L", "XL", "2XL"] as const;
@@ -16,8 +21,8 @@ export const STYLE_IMAGE: Record<Style, string> = {
 export const HOODIE = {
   handle: "akatsukizipup-mask-hoodie",
   title: "Akatsuki Mask Hoodie",
-  price: 57.95,
-  compareAt: 80.95,
+  price: usd(57.95), // $63.69
+  compareAt: usd(80.95), // $88.96
   images: [
     { src: "/store/akatsuki-front.webp", alt: "Akatsuki Mask Hoodie, front", style: "Akatsuki" as Style },
     { src: "/store/akatsuki-2.webp", alt: "Akatsuki Mask Hoodie, laid flat", style: "Akatsuki" as Style },
@@ -40,9 +45,9 @@ export interface Bundle {
 }
 // The original prices each extra hoodie lower: two at 10% off, three at 15% off the single price.
 export const BUNDLES: Bundle[] = [
-  { id: "solo", title: "Solo Hoodie", qty: 1, saving: "You Save 27% OFF!", price: 57.95 },
-  { id: "duo", title: "Duo Pack", qty: 2, saving: "You Save An EXTRA 27% OFF!", price: 104.31, sticker: "Most Popular" },
-  { id: "squad", title: "Squad Pack", qty: 3, saving: "You Save An EXTRA 27% OFF!", price: 147.77, ribbon: "MOST VALUE" },
+  { id: "solo", title: "Solo Hoodie", qty: 1, saving: "You Save 27% OFF!", price: usd(57.95) },
+  { id: "duo", title: "Duo Pack", qty: 2, saving: "You Save An EXTRA 27% OFF!", price: usd(104.31), sticker: "Most Popular" },
+  { id: "squad", title: "Squad Pack", qty: 3, saving: "You Save An EXTRA 27% OFF!", price: usd(147.77), ribbon: "MOST VALUE" },
 ];
 
 export type AddOnId = "mystery-box" | "shipping-protection" | "priority-shipping";
@@ -55,9 +60,9 @@ export interface AddOn {
   description: string;
 }
 export const ADD_ONS: AddOn[] = [
-  { id: "mystery-box", label: "Add Mystery Box", title: "Mystery Box", price: 13.95, image: "/store/upsell-mystery-box.webp", description: "Add a surprise item to your order." },
-  { id: "shipping-protection", label: "Add Shipping Protection", title: "Shipping Protection", price: 4.95, image: "/store/upsell-protection.webp", description: "Protect your order against loss, theft and damage in transit." },
-  { id: "priority-shipping", label: "Add Priority Shipping", title: "Priority Shipping", price: 3.95, image: "/store/upsell-priority.webp", description: "Your order is processed and shipped with priority." },
+  { id: "mystery-box", label: "Add Mystery Box", title: "Mystery Box", price: usd(13.95), image: "/store/upsell-mystery-box.webp", description: "Add a surprise item to your order." },
+  { id: "shipping-protection", label: "Add Shipping Protection", title: "Shipping Protection", price: usd(4.95), image: "/store/upsell-protection.webp", description: "Protect your order against loss, theft and damage in transit." },
+  { id: "priority-shipping", label: "Add Priority Shipping", title: "Priority Shipping", price: usd(3.95), image: "/store/upsell-priority.webp", description: "Your order is processed and shipped with priority." },
 ];
 
 export const PRODUCT_REVIEW = {
@@ -170,7 +175,7 @@ export const PERKS = [
   { title: "Ships in 1–3 days", text: "Arrives in 5–10 business days" },
 ];
 
-/** Prices in US dollars, written $57.95 (the original's figures, shown in dollars). */
+/** Prices in US dollars, written $63.69. */
 export function money(value: number): string {
   const [whole, cents] = value.toFixed(2).split(".");
   return `$${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${cents}`;
