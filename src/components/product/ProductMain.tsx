@@ -16,7 +16,6 @@ import {
   HOODIE,
   RECENT_BUYERS,
   SIZES,
-  STOCK,
   STYLE_IMAGE,
   STYLES,
   money,
@@ -31,12 +30,16 @@ type Choice = { style: Style; size: Size | null };
 
 const saving = (b: Bundle) => HOODIE.compareAt * b.qty - b.price;
 
-export function ProductMain() {
+/** `stock` is the live count per style, read by the page from the database. A sold-out style can't be picked. */
+export function ProductMain({ stock }: { stock: Record<Style, number> }) {
   const { add } = useCart();
   const [photo, setPhoto] = useState(0);
   const [bundleId, setBundleId] = useState<BundleId>("duo");
+  const firstInStock = STYLES.find((s) => stock[s] > 0) ?? STYLES[0];
+  const soldOut = STYLES.every((s) => stock[s] <= 0);
   // No size is pre-chosen: the original defaults everyone to S, which is how wrong sizes get ordered.
-  const [choices, setChoices] = useState<Choice[]>(Array.from({ length: 3 }, () => ({ style: "Akatsuki", size: null })));
+  const [choices, setChoices] = useState<Choice[]>(Array.from({ length: 3 }, () => ({ style: firstInStock, size: null })));
+  const [stockError, setStockError] = useState<string | null>(null);
   // Paid extras start unticked (the original pre-ticks all three; EU consumer law doesn't allow that).
   const [addOns, setAddOns] = useState<Set<AddOnId>>(new Set());
   const [missingSize, setMissingSize] = useState(false);
@@ -71,6 +74,7 @@ export function ProductMain() {
 
   const choose = (i: number, change: Partial<Choice>) => {
     setChoices((prev) => prev.map((c, j) => (j === i ? { ...c, ...change } : c)));
+    setStockError(null);
     if (change.style) setPhoto(HOODIE.images.findIndex((img) => img.style === change.style));
     if (change.size) setMissingSize(false);
   };
@@ -84,8 +88,16 @@ export function ProductMain() {
     });
 
   const addToCart = (from: HTMLElement | null) => {
+    if (soldOut) return;
     if (chosen.some((c) => !c.size)) {
       setMissingSize(true);
+      picker.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    // A pack can't hold more of a style than there are left (the server checks again when the order is placed).
+    const short = STYLES.find((s) => chosen.filter((c) => c.style === s).length > stock[s]);
+    if (short) {
+      setStockError(stock[short] <= 0 ? `${short} is sold out. Pick the other style.` : `Only ${stock[short]} ${short} left. Pick the other style for the rest.`);
       picker.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -199,7 +211,7 @@ export function ProductMain() {
                               <legend className="mb-2 text-[12px] font-semibold text-ink/60">
                                 {b.qty > 1 ? `Hoodie ${i + 1}` : "Your hoodie"} · <span className="text-ink">{c.style}</span>
                                 {c.size && <span className="text-ink">, {c.size}</span>}
-                                <span className="ml-1.5 font-bold text-brand">· Only {STOCK[c.style]} left</span>
+                                <span className="ml-1.5 font-bold text-brand">· {stock[c.style] > 0 ? `Only ${stock[c.style]} left` : "Sold out"}</span>
                               </legend>
                               <div className="flex gap-2">
                                 {STYLES.map((s) => (
@@ -207,14 +219,17 @@ export function ProductMain() {
                                     key={s}
                                     type="button"
                                     aria-pressed={c.style === s}
+                                    disabled={stock[s] <= 0}
                                     onClick={() => choose(i, { style: s })}
-                                    className={`flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-[13px] font-medium transition ${
-                                      c.style === s ? "border-ink bg-ink text-white" : "border-black/15 hover:border-black/40"
+                                    className={`flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                                      c.style === s ? "border-ink bg-ink text-white" : "border-black/15 hover:border-black/40 disabled:hover:border-black/15"
                                     }`}
                                   >
-                                    <Image src={STYLE_IMAGE[s]} alt="" width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
+                                    <Image src={STYLE_IMAGE[s]} alt="" width={28} height={28} className={`h-7 w-7 rounded-full object-cover ${stock[s] <= 0 ? "grayscale" : ""}`} />
                                     {s}
-                                    <span className={`text-[11px] font-semibold ${c.style === s ? "text-white/70" : "text-brand"}`}>{STOCK[s]} left</span>
+                                    <span className={`text-[11px] font-semibold ${c.style === s ? "text-white/70" : stock[s] <= 0 ? "text-ink/60" : "text-brand"}`}>
+                                      {stock[s] > 0 ? `${stock[s]} left` : "Sold out"}
+                                    </span>
                                   </button>
                                 ))}
                               </div>
@@ -243,6 +258,11 @@ export function ProductMain() {
                         {missingSize && on && (
                           <p className="text-[13px] font-semibold text-brand" role="alert">
                             Pick a size for {bundle.qty > 1 ? "each hoodie" : "your hoodie"} first.
+                          </p>
+                        )}
+                        {stockError && on && (
+                          <p className="text-[13px] font-semibold text-brand" role="alert">
+                            {stockError}
                           </p>
                         )}
                       </div>
@@ -280,11 +300,18 @@ export function ProductMain() {
           <button
             ref={buyButton}
             type="button"
+            disabled={soldOut}
             onClick={(e) => addToCart(e.currentTarget)}
-            className="btn-brand group relative mt-5 h-14 w-full overflow-hidden rounded-2xl text-[16px] shadow-[0_14px_30px_-14px_rgba(167,3,23,0.8)]"
+            className="btn-brand group relative mt-5 h-14 w-full overflow-hidden rounded-2xl text-[16px] shadow-[0_14px_30px_-14px_rgba(167,3,23,0.8)] disabled:cursor-not-allowed disabled:bg-ink/30 disabled:shadow-none disabled:active:scale-100"
           >
             <span className={`flex items-center gap-2 transition-all duration-300 ${added ? "-translate-y-8 opacity-0" : ""}`}>
-              Add to cart <span className="opacity-60">·</span> {money(total)}
+              {soldOut ? (
+                "Sold out"
+              ) : (
+                <>
+                  Add to cart <span className="opacity-60">·</span> {money(total)}
+                </>
+              )}
             </span>
             <span className={`absolute inset-0 grid place-items-center transition-all duration-300 ${added ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`} aria-hidden={!added}>
               Added to your cart ✓
@@ -315,8 +342,14 @@ export function ProductMain() {
               <span className="font-bold text-brand">{money(total)}</span> <s className="text-ink/40">{money(HOODIE.compareAt * bundle.qty + extras.reduce((n, a) => n + a.price, 0))}</s>
             </p>
           </div>
-          <button type="button" onClick={(e) => addToCart(e.currentTarget)} tabIndex={showSticky ? 0 : -1} className="btn-brand h-11 rounded-xl px-5 text-[14px]">
-            Add to cart
+          <button
+            type="button"
+            disabled={soldOut}
+            onClick={(e) => addToCart(e.currentTarget)}
+            tabIndex={showSticky ? 0 : -1}
+            className="btn-brand h-11 rounded-xl px-5 text-[14px] disabled:cursor-not-allowed disabled:bg-ink/30"
+          >
+            {soldOut ? "Sold out" : "Add to cart"}
           </button>
         </div>
       </div>

@@ -13,7 +13,8 @@ export const STYLES: Style[] = ["Akatsuki", "Shinobi"];
 export const SIZES = ["S", "M", "L", "XL", "2XL"] as const;
 export type Size = (typeof SIZES)[number];
 
-/** Pieces left of each style, shown as "Only 20 left". Change the numbers here. */
+/** Starting stock per style. The live count is in the database (Admin → Products & stock, src/lib/stock.ts);
+ *  these numbers are only shown if the database can't be reached. */
 export const STOCK: Record<Style, number> = { Akatsuki: 20, Shinobi: 35 };
 
 export const STYLE_IMAGE: Record<Style, string> = {

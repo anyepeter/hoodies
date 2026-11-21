@@ -3,6 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ADMIN_COOKIE, adminConfigured, checkAdminPassword, createSessionToken, sessionCookieOptions } from "@/lib/admin-auth";
+import { prisma } from "@/lib/db";
 import { rateLimit } from "@/lib/http";
 
 export type LoginState = { error?: string };
@@ -32,6 +33,8 @@ export async function login(_prev: LoginState, form: FormData): Promise<LoginSta
 
   const token = await createSessionToken();
   if (!token) return { error: "The admin password isn't set up on the server yet." };
+  // A good sign-in clears the counter, so only failed guesses ever add up to a lock-out.
+  await prisma.rateLimit.delete({ where: { key: `login:${ip}` } }).catch(() => {});
   (await cookies()).set(ADMIN_COOKIE, token, sessionCookieOptions);
   redirect(safeFrom(form.get("from")));
 }

@@ -60,6 +60,10 @@ export async function rateLimit(key: string, limit: number, windowSeconds: numbe
         "count" = CASE WHEN "RateLimit"."windowStart" < NOW() - make_interval(secs => ${windowSeconds}) THEN 1 ELSE "RateLimit"."count" + 1 END,
         "windowStart" = CASE WHEN "RateLimit"."windowStart" < NOW() - make_interval(secs => ${windowSeconds}) THEN NOW() ELSE "RateLimit"."windowStart" END
       RETURNING "count"`;
+    // Housekeeping: about 1 call in 200 clears counters older than a day, so the table never grows forever.
+    if (Math.random() < 0.005) {
+      prisma.$executeRaw`DELETE FROM "RateLimit" WHERE "windowStart" < NOW() - INTERVAL '1 day'`.catch(() => {});
+    }
     return (rows[0]?.count ?? 1) <= limit;
   } catch (err) {
     console.error("[rateLimit] failed for", key.split(":")[0], err);

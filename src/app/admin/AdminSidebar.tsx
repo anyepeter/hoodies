@@ -47,6 +47,7 @@ export function AdminSidebar() {
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("admin:badges", onPing);
     window.addEventListener("admin:order.created", onPing);
+    window.addEventListener("admin:order.updated", onPing);
     window.addEventListener("admin:chat.message", onPing);
     window.addEventListener("admin:contact.created", onPing);
     return () => {
@@ -55,6 +56,7 @@ export function AdminSidebar() {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("admin:badges", onPing);
       window.removeEventListener("admin:order.created", onPing);
+      window.removeEventListener("admin:order.updated", onPing);
       window.removeEventListener("admin:chat.message", onPing);
       window.removeEventListener("admin:contact.created", onPing);
     };

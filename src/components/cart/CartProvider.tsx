@@ -18,11 +18,15 @@ interface CartState {
   count: number;
   total: number;
   open: boolean;
+  /** False on the server and during hydration, before the browser's saved cart has been read. */
+  ready: boolean;
   setOpen: (open: boolean) => void;
   /** Adds and opens the drawer, after `openAfterMs` if given (so a fly-to-cart animation can land first). */
   add: (lines: Omit<CartLine, "qty">[], opts?: { openAfterMs?: number }) => void;
   setQty: (key: string, qty: number) => void;
   remove: (key: string) => void;
+  /** Empties the cart (after an order is placed). */
+  clear: () => void;
 }
 
 const CartContext = createContext<CartState | null>(null);
@@ -66,9 +70,11 @@ function subscribe(listener: () => void) {
   };
 }
 const setLines = (fn: (prev: CartLine[]) => CartLine[]) => writeCart(fn(readCart()));
+const noop = () => () => {};
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const lines = useSyncExternalStore(subscribe, readCart, () => EMPTY);
+  const ready = useSyncExternalStore(noop, () => true, () => false);
   const [open, setOpen] = useState(false);
 
   // Lock the page behind an open drawer so the background doesn't scroll on phones.
@@ -92,6 +98,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setLines((prev) => (qty <= 0 ? prev.filter((l) => l.key !== key) : prev.map((l) => (l.key === key ? { ...l, qty } : l))));
   }, []);
   const remove = useCallback((key: string) => setLines((prev) => prev.filter((l) => l.key !== key)), []);
+  const clear = useCallback(() => writeCart(EMPTY), []);
 
   const value = useMemo<CartState>(
     () => ({
@@ -99,12 +106,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
       count: lines.reduce((n, l) => n + l.qty, 0),
       total: lines.reduce((n, l) => n + l.qty * l.price, 0),
       open,
+      ready,
       setOpen,
       add,
       setQty,
       remove,
+      clear,
     }),
-    [lines, open, add, setQty, remove],
+    [lines, open, ready, add, setQty, remove, clear],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

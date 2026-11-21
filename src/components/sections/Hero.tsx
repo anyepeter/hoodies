@@ -68,8 +68,8 @@ export function Hero() {
   );
 }
 
-/** Akatsuki and Shinobi side by side, each with pieces left and its own Add to cart. */
-export function StylesSpotlight() {
+/** Akatsuki and Shinobi side by side, each with pieces left (live, from the page) and its own Add to cart. */
+export function StylesSpotlight({ stock }: { stock: Record<Style, number> }) {
   const styles: { name: Style; text: string; front: string; alt: string }[] = [
     { name: "Akatsuki", text: "Black, with the red clouds.", front: "/store/akatsuki-front.webp", alt: "/store/akatsuki-2.webp" },
     { name: "Shinobi", text: "Green vest look with navy sleeves.", front: "/store/shinobi-front.webp", alt: "/store/shinobi-back.webp" },
@@ -87,7 +87,7 @@ export function StylesSpotlight() {
       </div>
       <div className="mt-8 grid gap-4 md:grid-cols-2 md:gap-6">
         {styles.map((s, i) => (
-          <StyleCard key={s.name} style={s.name} text={s.text} front={s.front} back={s.alt} priority={i === 0} />
+          <StyleCard key={s.name} style={s.name} text={s.text} front={s.front} back={s.alt} left={stock[s.name]} priority={i === 0} />
         ))}
       </div>
     </section>

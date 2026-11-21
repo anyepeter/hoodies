@@ -73,13 +73,13 @@ export function Gallery({ images, active, onChange }: { images: GalleryImage[]; 
         <span className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-ink/70 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-white backdrop-blur">
           {index + 1} / {images.length}
         </span>
-        <div className="pointer-events-none absolute inset-x-2 top-1/2 hidden -translate-y-1/2 justify-between md:flex">
+        <div className="pointer-events-none absolute bottom-3 right-3 hidden gap-2 md:flex">
           <button
             type="button"
             aria-label="Previous photo"
             onClick={() => scrollTo(Math.max(0, index - 1))}
             disabled={index === 0}
-            className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full bg-white/90 text-ink shadow-md transition hover:scale-105 disabled:opacity-0"
+            className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full bg-white/90 text-ink shadow-md backdrop-blur transition hover:scale-105 disabled:opacity-40"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -88,7 +88,7 @@ export function Gallery({ images, active, onChange }: { images: GalleryImage[]; 
             aria-label="Next photo"
             onClick={() => scrollTo(Math.min(images.length - 1, index + 1))}
             disabled={index === images.length - 1}
-            className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full bg-white/90 text-ink shadow-md transition hover:scale-105 disabled:opacity-0"
+            className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full bg-white/90 text-ink shadow-md backdrop-blur transition hover:scale-105 disabled:opacity-40"
           >
             <ChevronRight className="h-5 w-5" />
           </button>
