@@ -104,7 +104,7 @@ export function AdminRealtime() {
           className="pointer-events-auto flex items-start gap-3 rounded-xl border border-zinc-200 bg-white p-3.5 shadow-lg ring-1 ring-black/5 motion-safe:animate-[pop_0.25s_ease-out]"
         >
           <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-brand" aria-hidden />
-          <Link href={t.href} onClick={() => dismiss(t.id)} className="min-w-0 flex-1">
+          <Link prefetch={false} href={t.href} onClick={() => dismiss(t.id)} className="min-w-0 flex-1">
             <span className="block text-sm font-semibold text-ink">{t.title}</span>
             {t.body && <span className="mt-0.5 block truncate text-xs text-zinc-500">{t.body}</span>}
             <span className="mt-1 block text-xs font-semibold text-brand">Open →</span>

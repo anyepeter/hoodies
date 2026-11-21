@@ -22,7 +22,7 @@ export function PageHeader({ title, subtitle, actions, back }: { title: string; 
     <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         {back && (
-          <Link href={back.href} className="mb-2 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-ink">
+          <Link prefetch={false} href={back.href} className="mb-2 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-ink">
             ← {back.label}
           </Link>
         )}
@@ -57,7 +57,7 @@ export function Kpi({ label: l, value, hint, tone = "default", href }: { label: 
     </div>
   );
   return href ? (
-    <Link href={href} className="block">
+    <Link prefetch={false} href={href} className="block">
       {body}
     </Link>
   ) : (
@@ -107,7 +107,7 @@ export function Tabs({ items, active }: { items: { key: string; label: string; h
   return (
     <nav className="no-scrollbar -mx-1 mb-4 flex gap-1 overflow-x-auto px-1" aria-label="Filter">
       {items.map((t) => (
-        <Link
+        <Link prefetch={false}
           key={t.key}
           href={t.href}
           aria-current={t.key === active ? "page" : undefined}

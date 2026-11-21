@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, PageHeader, StatusPill, btn, shortDate, usd } from "@/components/admin/ui";
-import { requireAdminPage } from "@/lib/admin-session";
+import { isAdmin, requireAdminPage } from "@/lib/admin-session";
 import { prisma } from "@/lib/db";
 import { describeUnits, parseStockTaken } from "@/lib/orders/pricing";
 import { STATUS_LABEL, orderNumber } from "@/lib/orders/status";
@@ -26,6 +26,8 @@ async function load(id: string) {
 }
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
+  // Metadata runs separately from the page: check the session here too before touching the order.
+  if (!(await isAdmin())) return { title: "Order" };
   const { id } = await params;
   const order = await prisma.order.findUnique({ where: { id }, select: { number: true } }).catch(() => null);
   return { title: order ? `Order ${orderNumber(order.number)}` : "Order" };
@@ -208,7 +210,7 @@ export default async function OrderDetail({ params }: Params) {
               )}
               <p className="text-xs text-zinc-500">
                 {previous > 0 ? (
-                  <Link href={`/admin/orders?q=${encodeURIComponent(order.email)}`} className="font-medium text-ink hover:text-brand">
+                  <Link prefetch={false} href={`/admin/orders?q=${encodeURIComponent(order.email)}`} className="font-medium text-ink hover:text-brand">
                     {previous} other {previous === 1 ? "order" : "orders"} from this email →
                   </Link>
                 ) : (

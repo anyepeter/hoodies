@@ -22,7 +22,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: SP
   const period = parsePeriod(sp.p);
   const mode = parseTraffic(sp.t);
   const range = periodRange(period);
-  const traffic = await loadTraffic();
+  const traffic = await loadTraffic(range.prevStart);
   const r = await loadReport(range, mode, traffic.botIds);
 
   const href = (next: { p?: PeriodKey; t?: TrafficMode }) => {
@@ -53,7 +53,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: SP
               ["all", "All traffic", traffic.total],
             ] as const
           ).map(([key, text, n]) => (
-            <Link
+            <Link prefetch={false}
               key={key}
               href={href({ t: key })}
               aria-current={mode === key ? "page" : undefined}

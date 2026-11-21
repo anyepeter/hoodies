@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Card, EmptyState, PageHeader, StatusPill, Tabs, btn, field, shortDate, usd } from "@/components/admin/ui";
 import { requireAdminPage } from "@/lib/admin-session";
 import { prisma } from "@/lib/db";
+import { expireUnpaidOrders } from "@/lib/orders/expire";
 import { ORDER_STATUSES, STATUS_LABEL, isOrderStatus, orderNumber, parseOrderNumber } from "@/lib/orders/status";
 import { BUNDLES } from "@/lib/store";
 import { AutoRefresh } from "./AutoRefresh";
@@ -17,6 +18,7 @@ type Search = { status?: string; q?: string; page?: string };
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<Search> }) {
   await requireAdminPage();
+  await expireUnpaidOrders();
   const sp = await searchParams;
   const status = isOrderStatus(sp.status) ? sp.status : null;
   const q = (typeof sp.q === "string" ? sp.q : "").trim().slice(0, 100);
@@ -77,7 +79,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <EmptyState
           title="Orders couldn't be loaded"
           action={
-            <Link href={href({})} className={btn.secondary}>
+            <Link prefetch={false} href={href({})} className={btn.secondary}>
               Try again
             </Link>
           }
@@ -119,7 +121,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           Search
         </button>
         {q && (
-          <Link href={href({ q: undefined, page: undefined })} className={btn.ghost}>
+          <Link prefetch={false} href={href({ q: undefined, page: undefined })} className={btn.ghost}>
             Clear
           </Link>
         )}
@@ -156,7 +158,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                 {orders.map((o) => (
                   <tr key={o.id} className="transition hover:bg-zinc-50">
                     <td className="px-5 py-3 align-top">
-                      <Link href={`/admin/orders/${o.id}`} className="font-semibold text-ink hover:text-brand">
+                      <Link prefetch={false} href={`/admin/orders/${o.id}`} className="font-semibold text-ink hover:text-brand">
                         {orderNumber(o.number)}
                       </Link>
                       <div className="text-xs text-zinc-500">
@@ -186,7 +188,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           <ul className="divide-y divide-zinc-100 md:hidden">
             {orders.map((o) => (
               <li key={o.id}>
-                <Link href={`/admin/orders/${o.id}`} className="block px-4 py-3.5 transition active:bg-zinc-50">
+                <Link prefetch={false} href={`/admin/orders/${o.id}`} className="block px-4 py-3.5 transition active:bg-zinc-50">
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-semibold text-ink">{orderNumber(o.number)}</span>
                     <span className="font-semibold tabular-nums">{usd(o.total)}</span>
@@ -212,12 +214,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           </span>
           <span className="flex gap-2">
             {page > 1 && (
-              <Link href={href({ page: page - 1 > 1 ? String(page - 1) : undefined })} className={btn.secondary}>
+              <Link prefetch={false} href={href({ page: page - 1 > 1 ? String(page - 1) : undefined })} className={btn.secondary}>
                 ← Newer
               </Link>
             )}
             {page < pages && (
-              <Link href={href({ page: String(page + 1) })} className={btn.secondary}>
+              <Link prefetch={false} href={href({ page: String(page + 1) })} className={btn.secondary}>
                 Older →
               </Link>
             )}

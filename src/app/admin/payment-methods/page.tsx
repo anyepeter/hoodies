@@ -33,7 +33,7 @@ export default async function PaymentMethodsPage() {
         <EmptyState
           title="Payment methods couldn't be loaded"
           action={
-            <Link href="/admin/payment-methods" className={btn.secondary}>
+            <Link prefetch={false} href="/admin/payment-methods" className={btn.secondary}>
               Try again
             </Link>
           }

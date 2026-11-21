@@ -447,7 +447,7 @@ function ThreadPane({ id, onBack, onChanged, onGone }: { id: string; onBack: () 
             <dt>Started</dt>
             <dd className="font-medium text-zinc-700">{fullDate(conv.createdAt)}</dd>
           </div>
-          {conv.pagePath && /^\/(?!\/)/.test(conv.pagePath) && (
+          {conv.pagePath && /^\/(?![\/\\])[^\s\\]*$/.test(conv.pagePath) && (
             <div className="flex min-w-0 gap-1">
               <dt className="shrink-0">on</dt>
               <dd className="min-w-0 truncate font-medium text-zinc-700">

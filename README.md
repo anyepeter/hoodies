@@ -11,8 +11,28 @@ client what a custom build can do.
 The site is marked noindex (and robots.txt disallows everything) because it's a design preview of a real store. `git checkout clone` to see it.
 - **`main`**: the improved version built on top of it (below).
 
-This is a demo: there is no payment provider, so "Check out" explains that rather than taking an order, and
-the newsletter and contact forms don't send anything.
+It has a real backend now (Neon Postgres via Prisma): orders with manual payment methods and invoices, stock
+that goes down when someone orders, live chat (Pusher), phone notifications for the admin, analytics,
+subscribers and contact messages. Checkout carries one line saying it's a design preview: orders are recorded
+but nothing is charged, because the site uses another company's brand.
+
+## Admin
+
+`/admin`, signed in with `ADMIN_PASSWORD` (local: `.env.local`; production: `.env.vercel-production` and Vercel).
+
+| Page | What it does |
+| --- | --- |
+| Dashboard | Revenue, orders, awaiting payment, visitors, conversion, stock, unread chats and messages |
+| Orders | Status tabs, search, detail with Mark paid (with reference) / shipped / delivered / cancel / refund, timeline, invoice. Cancelling puts stock back. Unpaid orders cancel themselves after 48 hours |
+| Products & stock | Pieces left per style (Akatsuki, Shinobi), +/− and set, sold and held counts |
+| Payment methods | What checkout offers and the instructions on the order page and invoice (`{order}`, `{total}`) |
+| Live chat | Inbox for the chat bubble on the store; replies arrive live on the shopper's screen |
+| Messages | The contact form |
+| Subscribers | Newsletter sign-ups, CSV export |
+| Analytics | Visitors, page views, time on page, pages, countries, devices, referrers, live now |
+| Notifications & app | Turn on phone notifications (new order, chat, message) and install the admin as an app |
+
+How it's built and the rules every module follows: `ADMIN-BLUEPRINT.md`.
 
 ## What's better than the original
 
@@ -67,13 +87,18 @@ Same brand, same photos and words. These are the changes, and why each one matte
 ## Run it
 
 ```bash
-npm install
-npm run dev -- -p 3200     # http://localhost:3200
+npm install                # also generates the Prisma client
+npm run dev -- -p 3200     # http://localhost:3200 (database: Neon branch "dev", from .env.local)
+npm run db:push            # apply prisma/schema.prisma
+npm run db:seed            # stock 20/35 + two example payment methods (only fills what's missing)
 ```
 
 Checks (run against a running server):
 
 ```bash
+node --env-file=.env.local e2e/checkout.mjs http://localhost:3200   # checkout, orders, stock, payment methods, admin
+node --env-file=.env.local e2e/chat.mjs http://localhost:3200       # live chat both ways, Pusher auth, push, layout
+node --env-file=.env.local e2e/insights.mjs http://localhost:3200   # tracking, analytics, newsletter, contact, dashboard
 node e2e/flow.mjs http://localhost:3200      # walks the buying flow: 12 checks
 node e2e/home-and-dates.mjs http://localhost:3200   # quick add on the style cards, pieces left, delivery dates on 22 Nov
 node e2e/screens.mjs http://localhost:3200 e2e/out   # phone + desktop screenshots, sideways-scroll check

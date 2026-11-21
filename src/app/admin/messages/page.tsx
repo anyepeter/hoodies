@@ -45,7 +45,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: SP 
 
       {counts.all === 0 ? (
         <EmptyState title="No messages yet">
-          Messages from the <Link href="/pages/contact" className="font-semibold text-ink underline">contact page</Link> land here, and your phone gets a notification when notifications are on.
+          Messages from the <Link prefetch={false} href="/pages/contact" className="font-semibold text-ink underline">contact page</Link> land here, and your phone gets a notification when notifications are on.
         </EmptyState>
       ) : rows.length === 0 ? (
         <EmptyState title={filter === "unread" ? "All caught up" : `No ${LABEL[filter].toLowerCase()} messages`}>

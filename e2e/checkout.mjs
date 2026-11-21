@@ -1,4 +1,5 @@
 // The whole order loop: a shopper buys a Duo pack + Mystery Box on a phone, the server prices and stocks it,
+// Admin pages hold a Pusher socket open, so they wait for "load" (not "networkidle").
 // the order page and invoice show it, then the admin confirms payment, refunds, cancels, and stock comes back
 // exactly once. Also: crafted requests (wrong prices, too many, unknown items), sold-out storefront, payment
 // methods. Leaves stock and payment methods as it found them.
@@ -16,7 +17,7 @@ if (!password) {
   process.exit(2);
 }
 
-// Each run looks like a fresh visitor to the rate limits (orders 10/hour per IP). Locally the dev server
+// Each run looks like a fresh visitor to the rate limits (orders 5/hour per IP). Locally the dev server
 // passes x-forwarded-for through; on Vercel the platform sets it and this header is ignored.
 const r = () => Math.floor(Math.random() * 250) + 1;
 const headers = { "x-forwarded-for": `10.${r()}.${r()}.${r()}` };
@@ -38,13 +39,13 @@ await admin.click('button[type="submit"]');
 await admin.waitForURL(`${base}/admin`, { timeout: 30000 });
 
 async function readStock(page = admin) {
-  await page.goto(`${base}/admin/products`, { waitUntil: "networkidle" });
+  await page.goto(`${base}/admin/products`, { waitUntil: "load" });
   const out = {};
   for (const s of STYLES) out[s] = Number((await page.locator(`[data-stock="${s}"]`).textContent()).match(/\d+/)[0]);
   return out;
 }
 async function setStock(style, n) {
-  await admin.goto(`${base}/admin/products`, { waitUntil: "networkidle" });
+  await admin.goto(`${base}/admin/products`, { waitUntil: "load" });
   await admin.fill(`#stock-${style}`, String(n));
   await admin
     .locator("li")
@@ -57,10 +58,10 @@ async function setStock(style, n) {
     .waitFor({ timeout: 30000 });
 }
 async function openOrder(page, number) {
-  await page.goto(`${base}/admin/orders?q=${encodeURIComponent(number)}`, { waitUntil: "networkidle" });
+  await page.goto(`${base}/admin/orders?q=${encodeURIComponent(number)}`, { waitUntil: "load" });
   await page.locator("table").getByRole("link", { name: number, exact: true }).click();
   await page.waitForURL(/\/admin\/orders\/[^/?]+$/);
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("load");
 }
 const statusPill = (page) => page.locator("main header span.rounded-full").first();
 
@@ -158,16 +159,16 @@ check(!(await page.getByRole("button", { name: "Print / Save as PDF" }).isVisibl
 await page.emulateMedia({ media: "screen" });
 await page.screenshot({ path: `${out}/invoice.png`, fullPage: true });
 
-// 6. Crafted requests: the server's prices win, too many is a 409, unknown items are refused.
-await admin.goto(`${base}/admin/orders`, { waitUntil: "networkidle" });
-const post = (body) =>
-  page.evaluate(
-    async ({ base, body }) => {
-      const res = await fetch(`${base}/api/orders`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      return { status: res.status, data: await res.json() };
-    },
-    { base, body },
-  );
+// 6. Crafted requests: the server's prices win, more than 6 hoodies is refused, unknown items are refused.
+await admin.goto(`${base}/admin/orders`, { waitUntil: "load" });
+// Each crafted request comes from its own made-up IP so the per-IP order limit (5/hour) doesn't mask the check.
+const post = async (body) => {
+  const res = await adminCtx.request.post(`${base}/api/orders`, {
+    headers: { origin: base, "content-type": "application/json", "x-forwarded-for": `10.${r()}.${r()}.${r()}` },
+    data: body,
+  });
+  return { status: res.status(), data: await res.json() };
+};
 const customer = { name: "Crafted Request", email: "crafted+e2e@example.com", country: "DE", address1: "Wolkenweg 1", city: "Berlin", postalCode: "10115", paymentOptionId: pmId };
 const crafted = await post({ ...customer, lines: [{ key: "bundle:solo:Akatsuki / S", qty: 1, price: 0.01 }], subtotal: 0.01, total: 0.01 });
 check(crafted.status === 201 && crafted.data.token, "a request with made-up prices is accepted…");
@@ -177,9 +178,11 @@ const craftedNumber = crafted.data.number;
 
 const tooMany = await post({ ...customer, lines: [{ key: "bundle:squad:Akatsuki / S, Akatsuki / M, Akatsuki / L", qty: 10 }] });
 check(
-  tooMany.status === 409 && tooMany.data.error === `Only ${before.Akatsuki - 2} Akatsuki left. Lower the quantity in your cart to continue.`,
-  `30 Akatsuki → 409 “${tooMany.data.error}”`,
+  tooMany.status === 400 && /up to 6 hoodies/.test(tooMany.data.error ?? ""),
+  `30 Akatsuki → 400 “${tooMany.data.error}” (one order can't take the whole stock)`,
 );
+const sevenSplit = await post({ ...customer, lines: [{ key: "bundle:squad:Akatsuki / S, Akatsuki / M, Akatsuki / L", qty: 2 }, { key: "bundle:solo:Shinobi / M", qty: 1 }] });
+check(sevenSplit.status === 400 && /up to 6 hoodies/.test(sevenSplit.data.error ?? ""), "7 hoodies across two lines → 400 too");
 const unknown = await post({ ...customer, lines: [{ key: "bundle:duo:Akatsuki / M", qty: 1 }] });
 check(unknown.status === 400, "a pack with the wrong number of hoodies → 400");
 const freebie = await post({ ...customer, lines: [{ key: "addon:free-hoodie", qty: 1 }] });
@@ -251,7 +254,7 @@ if (await staleConfirm.isVisible()) {
 } else {
   console.log("      (the stale tab refreshed itself from the realtime ping, so there was nothing stale to click)");
 }
-await stale.goto(stale.url(), { waitUntil: "networkidle" });
+await stale.goto(stale.url(), { waitUntil: "load" });
 check((await stale.getByText("Put back:").count()) === 1, "stock was put back once, not twice");
 await stale.close();
 const end = await readStock();
@@ -289,7 +292,7 @@ check((await readStock()).Akatsuki === before.Akatsuki, "Akatsuki stock restored
 
 // 13. Payment methods: add, show at checkout, hide, delete.
 const NAME = `E2E Pay ${r()}`;
-await admin.goto(`${base}/admin/payment-methods`, { waitUntil: "networkidle" });
+await admin.goto(`${base}/admin/payment-methods`, { waitUntil: "load" });
 await admin.getByRole("button", { name: "+ Add payment method" }).click();
 await admin.fill("#pm-name", "");
 await admin.getByRole("button", { name: "Add method" }).click();
@@ -305,7 +308,7 @@ check((await page.content()).includes(NAME), "the new method is offered at check
 const row = admin.locator("li").filter({ has: admin.getByRole("heading", { name: NAME }) });
 await row.getByRole("button", { name: `Move ${NAME} up` }).click();
 await admin.getByText(`${NAME} moved up.`).waitFor({ timeout: 30000 });
-await admin.reload({ waitUntil: "networkidle" });
+await admin.reload({ waitUntil: "load" });
 const names = await admin.locator("li h2").allTextContents();
 check(names.indexOf(NAME) === names.length - 2, "move up swaps it with the one above");
 await row.getByRole("button", { name: "Turn off" }).click();
@@ -324,12 +327,12 @@ await admin.screenshot({ path: `${out}/admin-payment-methods.png`, fullPage: tru
 
 // 14. The admin pages work on a phone.
 await admin.setViewportSize({ width: 390, height: 844 });
-await admin.goto(`${base}/admin/orders`, { waitUntil: "networkidle" });
+await admin.goto(`${base}/admin/orders`, { waitUntil: "load" });
 check(await admin.locator("ul.md\\:hidden a").first().isVisible(), "orders list is cards on a phone");
 const overflow = await admin.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
 check(!overflow, "orders list doesn't scroll sideways at 390px");
 await admin.screenshot({ path: `${out}/admin-orders-phone.png`, fullPage: true });
-await admin.goto(`${base}/admin/products`, { waitUntil: "networkidle" });
+await admin.goto(`${base}/admin/products`, { waitUntil: "load" });
 check(!(await admin.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "products page doesn't scroll sideways at 390px");
 
 check(errors.length === 0, `no page errors on the storefront${errors.length ? `: ${errors.join(" | ")}` : ""}`);

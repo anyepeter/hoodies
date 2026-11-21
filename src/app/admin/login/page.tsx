@@ -34,7 +34,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/admin/logi
             <LoginForm from={from} />
           )}
         </div>
-        <Link href="/" className="mt-6 block text-center text-sm text-white/50 transition hover:text-white">
+        <Link prefetch={false} href="/" className="mt-6 block text-center text-sm text-white/50 transition hover:text-white">
           ← Back to the store
         </Link>
       </div>

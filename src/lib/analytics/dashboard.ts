@@ -64,7 +64,7 @@ export async function loadDashboard(): Promise<Dashboard> {
     prisma.styleStock.findMany({ orderBy: { style: "asc" }, select: { style: true, stock: true } }),
     prisma.order.findMany({ orderBy: { createdAt: "desc" }, take: 5, select: { id: true, number: true, name: true, total: true, status: true, createdAt: true } }),
     prisma.contactMessage.findMany({ orderBy: { createdAt: "desc" }, take: 5, select: { id: true, name: true, email: true, body: true, status: true, createdAt: true } }),
-    loadTraffic().then(({ botIds }) => {
+    loadTraffic(r30.prevStart).then(({ botIds }) => {
       const onPv = trafficSql("people", botIds, Prisma.sql`"visitorId"`);
       const onV = trafficSql("people", botIds, Prisma.sql`v."id"`);
       return prisma.$queryRaw<Record<string, unknown>[]>`

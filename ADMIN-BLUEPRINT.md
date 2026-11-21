@@ -95,7 +95,17 @@ network failure ("We couldn't reach the server. Check your connection and try ag
 - [x] Foundation — 21 Nov 2026. `prisma/schema.prisma`, `src/lib/{db,admin-auth,admin-session,http,pusher-server,push,notify}.ts`,
   `src/proxy.ts`, `src/app/admin/{layout,AdminChrome,AdminSidebar,page}.tsx`, `src/app/admin/login/*`, `src/app/api/admin/badges`,
   `src/components/admin/ui.tsx`, `src/app/(store)/layout.tsx`.
-- [ ] Orders & stock
-- [ ] Realtime (chat, push, PWA)
-- [ ] Insights (analytics, subscribers, messages, dashboard)
-- [ ] Security review, e2e, deploy
+- [x] Orders & stock — 21 Nov 2026 (agent orders). Checkout, POST /api/orders (server pricing, atomic stock, 409 when
+  short), /order/[token], /invoice/[token], admin orders (guarded transitions, audit timeline, restore once),
+  payment methods, products & stock. e2e/checkout.mjs.
+- [x] Realtime — 21 Nov 2026 (agent realtime). Pusher client + /api/pusher/auth, chat widget + admin inbox, AdminRealtime
+  (window events + toasts + chime), web push devices, admin manifest + /admin-sw.js. e2e/chat.mjs.
+- [x] Insights — 21 Nov 2026 (agent insights). Visitor tracking (akz_vid cookie, order/invoice tokens collapsed),
+  analytics, newsletter + subscribers + CSV, contact → messages, dashboard. e2e/insights.mjs.
+- [x] Security review — 21 Nov 2026. Fixed: one order can't take the whole stock (max 6 hoodies, 5 orders/hour/IP,
+  unpaid orders auto-cancel after 48 h and give stock back), production has its own admin password / session secret /
+  VAPID keys, tracking capped (30/min + 1,000/day per IP) and analytics queries bounded to the period, chat page-path
+  and service-worker URL checks reject `/\host`, order metadata checks the session, admin links don't prefetch (CPU).
+  Open (low): no global login cap across IPs; stateless sessions can't be revoked one by one (rotate
+  ADMIN_SESSION_SECRET); a Vercel Firewall rule on /api/* would stop floods before they cost invocations.
+- [x] e2e: flow 12, home-and-dates 10, checkout 65, chat 70, insights 57 — all passing against `next start`.

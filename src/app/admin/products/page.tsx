@@ -53,7 +53,7 @@ export default async function ProductsPage() {
         <EmptyState
           title="Stock couldn't be loaded"
           action={
-            <Link href="/admin/products" className={btn.secondary}>
+            <Link prefetch={false} href="/admin/products" className={btn.secondary}>
               Try again
             </Link>
           }

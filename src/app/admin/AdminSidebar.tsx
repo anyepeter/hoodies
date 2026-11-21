@@ -70,7 +70,7 @@ export function AdminSidebar() {
     <>
       {/* Phone: top bar with the menu button */}
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-white/10 bg-ink px-4 text-white lg:hidden">
-        <Link href="/admin" className="flex items-center gap-2">
+        <Link prefetch={false} href="/admin" className="flex items-center gap-2">
           <span className="rounded-md bg-white px-1.5 py-1">
             <Image src="/store/logo.jpg" alt="AkatsukiZipUp" width={1600} height={719} className="h-5 w-auto" />
           </span>
@@ -95,7 +95,7 @@ export function AdminSidebar() {
       <aside className={`${open ? "block" : "hidden"} fixed inset-x-0 top-14 bottom-0 z-30 overflow-y-auto bg-ink lg:inset-y-0 lg:left-0 lg:top-0 lg:block lg:w-64 lg:border-r lg:border-white/5`}>
         <div className="flex min-h-full flex-col">
           <div className="hidden border-b border-white/10 px-6 py-6 lg:block">
-            <Link href="/admin" className="block">
+            <Link prefetch={false} href="/admin" className="block">
               <span className="inline-block rounded-lg bg-white px-2 py-1.5">
                 <Image src="/store/logo.jpg" alt="AkatsukiZipUp" width={1600} height={719} className="h-7 w-auto" />
               </span>
@@ -108,7 +108,7 @@ export function AdminSidebar() {
               const active = isActive(item.href);
               const count = item.badge ? counts[item.badge] : 0;
               return (
-                <Link
+                <Link prefetch={false}
                   key={item.href}
                   href={item.href}
                   onClick={() => setOpen(false)}
@@ -133,7 +133,7 @@ export function AdminSidebar() {
           </nav>
 
           <div className="border-t border-white/10 px-3 py-4">
-            <Link href="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/55 transition hover:bg-white/5 hover:text-white">
+            <Link prefetch={false} href="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/55 transition hover:bg-white/5 hover:text-white">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>

@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
         email: email ? email.toLowerCase() : null,
         visitorId,
         // A path on this site only ("/x", never "//other.site"): the admin's inbox links to it.
-        pagePath: pagePath && /^\/(?!\/)\S*$/.test(pagePath) ? pagePath : null,
+        pagePath: pagePath && /^\/(?![\/\\])[^\s\\]*$/.test(pagePath) ? pagePath : null,
         userAgent: req.headers.get("user-agent")?.slice(0, 500) ?? null,
         unreadForAdmin: 1,
         lastMessage: previewOf(message),

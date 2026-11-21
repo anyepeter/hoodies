@@ -40,7 +40,7 @@ export default async function AdminHome() {
           <h2 id="today-heading" className="text-sm font-semibold">
             Today
           </h2>
-          <Link href="/admin/analytics?p=today" className="flex items-center gap-2 text-xs text-white/70 hover:text-white">
+          <Link prefetch={false} href="/admin/analytics?p=today" className="flex items-center gap-2 text-xs text-white/70 hover:text-white">
             <span className={`h-2 w-2 rounded-full ${d.liveNow > 0 ? "bg-emerald-400" : "bg-white/30"}`} aria-hidden />
             {d.liveNow > 0 ? `${plural(d.liveNow, "visitor")} on the store now` : "Nobody on the store right now"}
           </Link>
@@ -48,7 +48,7 @@ export default async function AdminHome() {
         <ul className="grid grid-cols-2 divide-white/10 sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
           {today.map((t) => (
             <li key={t.label}>
-              <Link href={t.href} className="block h-full px-5 py-3.5 transition hover:bg-white/5">
+              <Link prefetch={false} href={t.href} className="block h-full px-5 py-3.5 transition hover:bg-white/5">
                 <span className="block text-[11px] font-semibold uppercase tracking-wide text-white/55">{t.label}</span>
                 <span className="mt-1 block text-xl font-bold tabular-nums tracking-tight">{t.value}</span>
               </Link>
@@ -84,10 +84,10 @@ export default async function AdminHome() {
           tone={needsReply > 0 ? "alert" : "default"}
           hint={
             <span className="flex flex-wrap gap-x-2">
-              <Link href="/admin/chat" className="underline decoration-zinc-300 underline-offset-2 hover:text-ink">
+              <Link prefetch={false} href="/admin/chat" className="underline decoration-zinc-300 underline-offset-2 hover:text-ink">
                 {plural(d.unreadChats, "unread chat")}
               </Link>
-              <Link href="/admin/messages" className="underline decoration-zinc-300 underline-offset-2 hover:text-ink">
+              <Link prefetch={false} href="/admin/messages" className="underline decoration-zinc-300 underline-offset-2 hover:text-ink">
                 {plural(d.unreadMessages, "unread message")}
               </Link>
             </span>
@@ -110,7 +110,7 @@ export default async function AdminHome() {
           className="lg:col-span-3"
           title="Recent orders"
           actions={
-            <Link href="/admin/orders" className="text-xs font-semibold text-zinc-500 hover:text-ink">
+            <Link prefetch={false} href="/admin/orders" className="text-xs font-semibold text-zinc-500 hover:text-ink">
               All orders →
             </Link>
           }
@@ -124,7 +124,7 @@ export default async function AdminHome() {
             <ul className="divide-y divide-zinc-100">
               {d.recentOrders.map((o) => (
                 <li key={o.id}>
-                  <Link href={`/admin/orders/${o.id}`} className="flex items-center gap-3 px-5 py-3 transition hover:bg-zinc-50">
+                  <Link prefetch={false} href={`/admin/orders/${o.id}`} className="flex items-center gap-3 px-5 py-3 transition hover:bg-zinc-50">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-ink">
                         <span className="tabular-nums">{orderNo(o.number)}</span> · {o.name}
@@ -148,7 +148,7 @@ export default async function AdminHome() {
           className="lg:col-span-2"
           title="Recent messages"
           actions={
-            <Link href="/admin/messages?status=all" className="text-xs font-semibold text-zinc-500 hover:text-ink">
+            <Link prefetch={false} href="/admin/messages?status=all" className="text-xs font-semibold text-zinc-500 hover:text-ink">
               Inbox →
             </Link>
           }

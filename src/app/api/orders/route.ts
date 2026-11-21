@@ -5,7 +5,8 @@ import { clientIp, fail, ok, rateLimit, readJson, sameOrigin, serverError } from
 import { notifyAdmins } from "@/lib/notify";
 import { orderSchema } from "@/lib/orders/checkout-schema";
 import { countryName } from "@/lib/orders/countries";
-import { decimal, describeUnits, moneyCents, priceCart, summarizeLines } from "@/lib/orders/pricing";
+import { expireUnpaidOrders } from "@/lib/orders/expire";
+import { MAX_QTY, decimal, describeUnits, moneyCents, priceCart, summarizeLines } from "@/lib/orders/pricing";
 import { paymentSnapshot } from "@/lib/orders/queries";
 import { orderNumber } from "@/lib/orders/status";
 import { revalidateStorefront } from "@/lib/stock";
@@ -30,9 +31,12 @@ class OutOfStock extends Error {
  * amounts. Stock is taken with one conditional UPDATE per style inside the same transaction that writes the
  * order, so two shoppers can never buy the same last hoodie.
  */
+/** Most hoodies one order may take. */
+const MAX_HOODIES_PER_ORDER = 6;
+
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return fail("Bad origin.", 403);
-  if (!(await rateLimit(`orders:${clientIp(req)}`, 10, 60 * 60))) {
+  if (!(await rateLimit(`orders:${clientIp(req)}`, 5, 60 * 60))) {
     return fail("Too many orders from your connection in the last hour. Please try again later.", 429);
   }
   const parsed = await readJson(req, orderSchema);
@@ -43,6 +47,15 @@ export async function POST(req: NextRequest) {
   const cart = priceCart(body.lines);
   if (cart.invalid.length > 0) return fail("Something in your cart isn't sold any more. Remove it and try again.", 400, { invalid: cart.invalid });
   if (cart.lines.length === 0) return fail("Your cart is empty.", 400);
+  // One order can't take the whole stock: otherwise a script could "buy" everything unpaid and show the store
+  // as sold out. Merged duplicate lines count too.
+  const hoodies = STYLES.reduce((n, s) => n + cart.units[s], 0);
+  if (hoodies > MAX_HOODIES_PER_ORDER) {
+    return fail(`You can order up to ${MAX_HOODIES_PER_ORDER} hoodies at a time. For more, send us a message.`, 400);
+  }
+  if (cart.lines.some((l) => l.quantity > MAX_QTY)) return fail(`Up to ${MAX_QTY} of each item, please.`, 400);
+  // Unpaid orders older than 48 h give their stock back (cheap: one indexed query, usually empty).
+  after(expireUnpaidOrders);
 
   try {
     const option = await prisma.paymentOption.findFirst({ where: { id: body.paymentOptionId, active: true }, select: { id: true, name: true, instructions: true, details: true } });

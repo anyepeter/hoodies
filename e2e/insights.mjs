@@ -28,7 +28,12 @@ const sender = `E2E Tester ${stamp}`;
 /* ---- 1. A shopper browses ------------------------------------------------------------------------------
    Playwright's default user agent says "HeadlessChrome" and navigator.webdriver is true, and the tracker
    rightly ignores both. A real Chrome agent plus webdriver=false makes this browser count as a person. */
+// Each run looks like a fresh connection to the rate limits (newsletter 10/hour, tracking 30/min per IP).
+// Locally the server passes x-forwarded-for through; on Vercel the platform sets it.
+const rnd = () => Math.floor(Math.random() * 250) + 1;
+const runHeaders = { "x-forwarded-for": `10.${rnd()}.${rnd()}.${rnd()}` };
 const shop = await browser.newContext({
+  extraHTTPHeaders: runHeaders,
   viewport: { width: 1280, height: 900 },
   userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
 });
@@ -115,7 +120,7 @@ await page.close(); // pagehide: the last beacon
 await shop.close();
 
 /* ---- 4. Admin ------------------------------------------------------------------------------------------ */
-const admin = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+const admin = await browser.newContext({ extraHTTPHeaders: runHeaders, viewport: { width: 1440, height: 900 }, acceptDownloads: true });
 const a = await admin.newPage();
 a.on("pageerror", (e) => errors.push(`admin: ${e.message}`));
 await a.goto(`${base}/admin/login`, { waitUntil: "networkidle" });

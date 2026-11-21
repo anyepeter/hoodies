@@ -20,7 +20,10 @@ export async function POST(req: NextRequest) {
   const ua = req.headers.get("user-agent") ?? "";
   if (isLikelyBot(ua)) return NextResponse.json({ ok: true, ignored: "bot" });
   if (!sameOrigin(req)) return fail("Bad origin.", 403);
-  if (!(await rateLimit(`track:${clientIp(req)}`, 120, 60))) return fail("Too many requests.", 429);
+  // 30 a minute and 1,000 a day per connection: plenty for a real shopper, and a cap on how much a script can
+  // write into the database (it's a free-tier Postgres; a full disk would stop orders too).
+  const ip = clientIp(req);
+  if (!(await rateLimit(`track:${ip}`, 30, 60)) || !(await rateLimit(`track-day:${ip}`, 1000, 86_400))) return fail("Too many requests.", 429);
 
   const parsed = await readJson(req, schema, 4_000);
   if ("response" in parsed) return parsed.response;

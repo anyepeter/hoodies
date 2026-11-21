@@ -98,7 +98,7 @@ export default async function SubscribersPage({ searchParams }: { searchParams: 
                 {q ? (
                   <>
                     No {filter === "all" ? "" : `${filter} `}addresses match &ldquo;{q}&rdquo;.{" "}
-                    <Link href={link(filter, "")} className="font-semibold text-ink underline">
+                    <Link prefetch={false} href={link(filter, "")} className="font-semibold text-ink underline">
                       Clear the search
                     </Link>
                   </>

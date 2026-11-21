@@ -46,7 +46,12 @@ export interface Traffic {
   people: number;
 }
 
-export async function loadTraffic(): Promise<Traffic> {
+/**
+ * Classifies the visitors seen since `since` (the start of the period being shown, previous period included).
+ * Bounded on purpose: classifying every visitor ever made each admin page load slower as history grew, and a
+ * flood of fake visits would have made the dashboard itself time out.
+ */
+export async function loadTraffic(since: Date): Promise<Traffic> {
   const [rows, totals] = await Promise.all([
     prisma.$queryRaw<{ id: string; reason: BotReason }[]>`
       WITH s AS (
@@ -55,6 +60,7 @@ export async function loadTraffic(): Promise<Traffic> {
                COUNT(pv."id") FILTER (WHERE pv."durationMs" > 0)::int AS timed
         FROM "Visitor" v
         LEFT JOIN "PageView" pv ON pv."visitorId" = v."id"
+        WHERE v."lastSeenAt" >= ${since}
         GROUP BY v."id"
       ),
       crowds AS (
@@ -74,7 +80,7 @@ export async function loadTraffic(): Promise<Traffic> {
         OR s.views = 0
         OR (s.ua IN (SELECT ua FROM crowds) AND s.views <= ${CROWD_MAX_VIEWS})
       )`,
-    prisma.visitor.count(),
+    prisma.visitor.count({ where: { lastSeenAt: { gte: since } } }),
   ]);
   const reasonById = new Map(rows.map((r) => [r.id, r.reason]));
   const byReason: Record<BotReason, number> = { "not-a-browser": 0, "no-page": 0, crowd: 0 };

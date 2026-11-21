@@ -23,7 +23,7 @@ self.addEventListener("push", (event) => {
     tag: data.tag || undefined,
     renotify: Boolean(data.tag),
     // Only a path on this site ("/admin/…", never "//elsewhere"), so a tap can't send anyone off-site.
-    data: { url: typeof data.url === "string" && /^\/(?!\/)/.test(data.url) ? data.url : "/admin" },
+    data: { url: typeof data.url === "string" && /^\/(?![\/\\])[^\s\\]*$/.test(data.url) ? data.url : "/admin" },
     icon: "/icon.png",
     badge: "/icon.png",
   };
