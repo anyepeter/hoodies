@@ -3,7 +3,7 @@
 A rebuild of the AkatsukiZipUp store (akatsukizipup.com) in Next.js 16 + Tailwind CSS 4, made to show the
 client what a custom build can do.
 
-- **Tag `clone`**: the faithful copy. Same pages, photos, video, wording, prices (EUR), colours (#A70317) and
+- **Tag `clone`**: the faithful copy. Same pages, photos, video, wording, prices (euros converted to US dollars at 1.099), colours (#A70317) and
   Poppins type as the live Shopify store on 21 Nov 2026.
 - **`main`**: the improved version built on top of it.
 
