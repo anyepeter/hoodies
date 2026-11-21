@@ -121,10 +121,10 @@ export const FOOTER_LINKS = [
   { label: "Contact information", href: "/policies/contact-information" },
 ];
 
-/** The store prices in euros, written the way the original shows them: €57,95. */
+/** Prices in US dollars, written $57.95 (the original's figures, shown in dollars). */
 export function money(value: number): string {
   const [whole, cents] = value.toFixed(2).split(".");
-  return `€${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${cents}`;
+  return `$${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${cents}`;
 }
 
 export const SAVE_PERCENT = Math.round((1 - HOODIE.price / HOODIE.compareAt) * 100); // 28
