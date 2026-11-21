@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { withInvoices } from "@/lib/chat/order-chat";
+import { messageSelect, withInvoices } from "@/lib/chat/order-chat";
 import { visitorConversationDTO, type MyConversation } from "@/lib/chat/server";
 import type { ChatMessageDTO, VisitorConversationDTO } from "@/lib/chat/shared";
 
@@ -13,7 +13,7 @@ export async function visitorThread(conv: MyConversation): Promise<{ conversatio
     where: { conversationId: conv.id },
     orderBy: { createdAt: "desc" },
     take: 200,
-    select: { id: true, sender: true, body: true, createdAt: true, kind: true, orderId: true },
+    select: messageSelect,
   });
   const [messages] = await Promise.all([
     withInvoices(latest.reverse(), { admin: false }),

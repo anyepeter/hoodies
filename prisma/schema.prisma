@@ -68,6 +68,8 @@ model Order {
   invoiceAnswer        String? // "confirmed" | "wrong", from the buttons under the invoice
   invoiceAnsweredAt    DateTime?
   paymentDetailsSentAt DateTime? // when the admin sent the payment details in the chat
+  /// 1 for the first invoice; +1 every time the admin sends an updated one (INV-1001, INV-1001-2, ...).
+  invoiceVersion       Int       @default(1)
 
   // Money, all USD, recomputed on the server from src/lib/store.ts (never trusted from the browser)
   compareAtTotal Decimal @db.Decimal(10, 2) // what it would cost at full price
@@ -216,12 +218,18 @@ model Conversation {
 
   unreadForAdmin   Int      @default(0)
   unreadForVisitor Int      @default(0)
+  /// Last time the shopper's browser checked in (opened or refreshed the chat). Pushes skip people who are here.
+  visitorLastSeenAt DateTime?
+  /// Last push sent to the shopper for this chat (at most one a minute).
+  lastPushAt        DateTime?
   lastMessageAt    DateTime @default(now())
   lastMessage      String? // preview for the inbox
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   messages ChatMessage[]
+  pushSubscriptions ChatPushSubscription[]
+  files             ChatFile[]
 
   @@index([lastMessageAt])
   @@index([status, lastMessageAt])
@@ -237,8 +245,15 @@ model ChatMessage {
   /// or "PAYMENT" (the payment details the admin sent for an order).
   kind           String       @default("TEXT")
   orderId        String?
-  /// For INVOICE: { answer: "confirmed" | "wrong" } once the shopper tapped a button.
+  /// For INVOICE: { version: n, answer?: "confirmed" | "wrong" }.
   meta           Json?
+  /// A picture or PDF sent with the message (bytes live in ChatFile, so listing messages never loads them).
+  fileId         String?
+  fileName       String?
+  fileMime       String?
+  fileSize       Int?
+  fileWidth      Int?
+  fileHeight     Int?
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
@@ -305,4 +320,34 @@ model RateLimit {
   key         String   @id
   count       Int
   windowStart DateTime
+}
+
+/// A file sent in a chat: a picture (made small in the browser first, stored as WebP/JPEG) or a PDF.
+/// Served only to that chat's shopper (by cookie) and to the admin.
+model ChatFile {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  mime           String
+  size           Int
+  data           Bytes
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+}
+
+/// A shopper's browser/phone that turned on notifications from the chat ("Don't miss your payment details").
+model ChatPushSubscription {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  endpoint       String       @unique @db.Text
+  p256dh         String       @db.Text
+  auth           String       @db.Text
+  userAgent      String?      @db.Text
+  failures       Int          @default(0)
+  lastUsedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
 }

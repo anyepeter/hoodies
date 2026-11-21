@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/admin-session";
 import { deviceLabel } from "@/lib/chat/device";
-import { withInvoices } from "@/lib/chat/order-chat";
+import { messageSelect, withInvoices } from "@/lib/chat/order-chat";
 import { messageDTO, pingConversation } from "@/lib/chat/server";
 import { CONVERSATION_ID, MESSAGE_MAX, previewOf } from "@/lib/chat/shared";
 import { prisma } from "@/lib/db";
@@ -51,7 +51,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
         unreadForVisitor: true,
         createdAt: true,
         lastMessageAt: true,
-        messages: { orderBy: { createdAt: "desc" }, take: 500, select: { id: true, sender: true, body: true, createdAt: true, kind: true, orderId: true } },
+        messages: { orderBy: { createdAt: "desc" }, take: 500, select: messageSelect },
       },
     });
     if (!conv) return notFound();
