@@ -17,7 +17,7 @@ export async function expireUnpaidOrders(): Promise<number> {
     const cutoff = new Date(Date.now() - PENDING_EXPIRY_HOURS * 3_600_000);
     const stale = await prisma.order.findMany({
       where: { status: "PENDING", createdAt: { lt: cutoff } },
-      select: { id: true, stockTaken: true },
+      select: { id: true },
       orderBy: { createdAt: "asc" },
       take: 25,
     });
@@ -31,7 +31,9 @@ export async function expireUnpaidOrders(): Promise<number> {
         });
         const claim = await tx.order.updateMany({ where: { id: order.id, stockRestored: false }, data: { stockRestored: true } });
         if (claim.count === 0) return false;
-        const taken = parseStockTaken(order.stockTaken);
+        // Under the row lock the status change took, so an admin's edit can't change it in between.
+        const held = await tx.order.findUnique({ where: { id: order.id }, select: { stockTaken: true } });
+        const taken = parseStockTaken(held?.stockTaken);
         for (const style of STYLES) {
           const n = taken[style];
           if (n > 0) await tx.$executeRaw`UPDATE "StyleStock" SET "stock" = "stock" + ${n}, "updatedAt" = NOW() WHERE "style" = ${style}`;

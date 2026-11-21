@@ -1,13 +1,37 @@
 "use client";
 
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { CloseIcon } from "@/components/icons";
-import { CHAT_EVENT, EMAIL_MAX, MESSAGE_MAX, NAME_MAX, type ChatMessageDTO, type InvoiceAnswer, type VisitorConversationDTO } from "@/lib/chat/shared";
+import {
+  CHAT_EVENT,
+  EMAIL_MAX,
+  INVOICE_COPY,
+  MESSAGE_MAX,
+  NAME_MAX,
+  type ChatFileDTO,
+  type ChatMessageDTO,
+  type InvoiceAnswer,
+  type VisitorConversationDTO,
+} from "@/lib/chat/shared";
 import { chatChannel, listen } from "@/lib/pusher-client";
 import { HOODIE } from "@/lib/store";
-import { STICKY_BAR_PATH, handleOpenRequests, setChatOpen } from "./chat-open";
+import { ATTACH_ACCEPT, localFile, prepareAttachment, uploadAttachment, type Prepared } from "./attach";
+import { ChatImage, FileChip, ImageViewer, PaperclipIcon } from "./Attachments";
+import { OPEN_CHAT_EVENT, SAFE_PATH, STICKY_BAR_PATH, handleOpenRequests, setChatOpen } from "./chat-open";
+import { NotifyCard, notifyAfter } from "./NotifyCard";
 import { PaymentCard, VisitorInvoice } from "./OrderCards";
 
 /*
@@ -26,6 +50,10 @@ import { PaymentCard, VisitorInvoice } from "./OrderCards";
  * and two buttons), and the store later sends the payment details (a PAYMENT card with Copy). The order-confirmed
  * page fires "akz:open-chat": the panel opens, loads the thread by cookie (a first-time chatter's browser doesn't
  * know the conversation yet) and scrolls to the invoice.
+ *
+ * Like the vape store: pictures and PDFs both ways (paperclip; pictures are made small in the browser, see
+ * attach.ts), a "turn on notifications" card under "Thanks for confirming!" (NotifyCard), and a tapped
+ * notification (/?chat=open, or a message from /sw.js to an open tab) opens the panel on the newest message.
  */
 
 const ID_KEY = "akz_chat_id";
@@ -90,6 +118,7 @@ let localSeq = 0;
 
 export function ChatWidget() {
   const pathname = usePathname();
+  const router = useRouter();
   const raised = pathname === STICKY_BAR_PATH;
 
   const [open, setOpen] = useState(false);
@@ -109,6 +138,8 @@ export function ChatWidget() {
   // Opened for an order: show the loading skeleton (not the "start a chat" form) until the thread arrives.
   const [expecting, setExpecting] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
+  const [preparing, setPreparing] = useState(false);
+  const [viewing, setViewing] = useState<ChatFileDTO | null>(null);
 
   const openRef = useRef(false);
   const convIdRef = useRef<string | null>(null);
@@ -117,6 +148,9 @@ export function ChatWidget() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const honeypotRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  /** Files still sending or failed, by local message id: what to send again on Retry, and the preview to free. */
+  const uploads = useRef(new Map<string, { prepared: Prepared; caption: string; url: string }>());
   /** "waiting": opened for an order, scroll to the invoice once the thread has loaded ("ready"). */
   const focusInvoice = useRef<"no" | "waiting" | "ready">("no");
 
@@ -191,11 +225,11 @@ export function ChatWidget() {
     });
   }, [convId, loadThread, peek]);
 
-  // "akz:open-chat" (the order-confirmed page): open the panel on the shopper's invoice.
+  // "akz:open-chat": the order-confirmed page (open on the shopper's invoice) or a tapped notification (newest).
   useEffect(
     () =>
-      handleOpenRequests(() => {
-        focusInvoice.current = "waiting";
+      handleOpenRequests((req) => {
+        focusInvoice.current = req.at === "invoice" ? "waiting" : "no";
         setNotice(null);
         if (!convIdRef.current) {
           setExpecting(true);
@@ -206,6 +240,37 @@ export function ChatWidget() {
       }),
     [loadThread],
   );
+
+  // A tapped notification opens "/?chat=open": open the panel on the newest message and tidy the address bar.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("chat") !== "open") return;
+    url.searchParams.delete("chat");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    window.dispatchEvent(new CustomEvent(OPEN_CHAT_EVENT, { detail: { at: "latest" } }));
+  }, []);
+
+  // ...or, when a store tab is already open, /sw.js focuses it and posts { type: "akz:open", url } here.
+  useEffect(() => {
+    const sw = typeof navigator !== "undefined" ? navigator.serviceWorker : undefined;
+    if (!sw) return;
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { type?: unknown; url?: unknown } | null;
+      if (d?.type !== "akz:open" || typeof d.url !== "string" || !SAFE_PATH.test(d.url)) return;
+      const target = new URL(d.url, window.location.origin);
+      if (target.searchParams.get("chat") === "open") window.dispatchEvent(new CustomEvent(OPEN_CHAT_EVENT, { detail: { at: "latest" } }));
+      else router.push(`${target.pathname}${target.search}`);
+    };
+    sw.addEventListener("message", onMessage);
+    sw.startMessages?.();
+    return () => sw.removeEventListener("message", onMessage);
+  }, [router]);
+
+  // Free the previews of files that never finished sending.
+  useEffect(() => {
+    const map = uploads.current;
+    return () => map.forEach((u) => URL.revokeObjectURL(u.url));
+  }, []);
 
   // Open panel: load now, then the slow safety refresh while the tab is visible.
   useEffect(() => {
@@ -263,9 +328,16 @@ export function ChatWidget() {
     el.scrollTop = el.scrollHeight;
   }, [last?.id, last?.pending, open, loaded, focusTick]);
 
+  /** Something grew at the end of the thread (the notify card): keep the newest in view if they were reading there. */
+  const followBottom = useCallback(() => {
+    const el = listRef.current;
+    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 320) el.scrollTop = el.scrollHeight;
+  }, []);
+
   const close = useCallback(() => {
     const hadFocus = panelRef.current?.contains(document.activeElement);
     setOpen(false);
+    setViewing(null);
     if (hadFocus) window.setTimeout(() => bubbleRef.current?.focus(), 0);
   }, []);
 
@@ -364,6 +436,67 @@ export function ChatWidget() {
     return r.error;
   };
 
+  /** A picture or PDF (+ the text box as its caption): shown at once as "sending", then swapped for the saved one. */
+  const sendFile = async (prepared: Prepared, caption: string, retryId?: string) => {
+    const localId = retryId ?? `local-${++localSeq}`;
+    if (retryId) {
+      setMessages((prev) => prev.map((m) => (m.id === retryId ? { ...m, pending: "sending", error: undefined } : m)));
+    } else {
+      const url = URL.createObjectURL(prepared.blob);
+      uploads.current.set(localId, { prepared, caption, url });
+      setMessages((prev) => [
+        ...prev,
+        { id: localId, sender: "VISITOR", body: caption, createdAt: new Date().toISOString(), kind: "TEXT", file: localFile(prepared, localId, url), pending: "sending" },
+      ]);
+    }
+
+    const r = await uploadAttachment("/api/chat/files", prepared, caption);
+    if (r.ok) {
+      const saved = r.message;
+      setMessages((prev) => {
+        const next = prev.map((m) => (m.id === localId ? saved : m));
+        return next.filter((m, i) => next.findIndex((x) => x.id === m.id) === i);
+      });
+      setConv((c) => (c ? { ...c, status: "OPEN" } : c));
+      discardUpload(localId);
+    } else if (r.code === "no_conversation") {
+      forget();
+      setMessages([]);
+      discardUpload(localId);
+      setNotice("This chat has ended. Send a message to start a new one.");
+    } else {
+      setMessages((prev) => prev.map((m) => (m.id === localId ? { ...m, pending: "failed", error: r.error } : m)));
+    }
+  };
+
+  const discardUpload = (localId: string) => {
+    const u = uploads.current.get(localId);
+    if (u) URL.revokeObjectURL(u.url);
+    uploads.current.delete(localId);
+  };
+
+  const removeFailed = (localId: string) => {
+    discardUpload(localId);
+    setMessages((prev) => prev.filter((m) => m.id !== localId));
+  };
+
+  const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // the same file can be picked again
+    if (!file || !conv || preparing) return;
+    setPreparing(true);
+    const p = await prepareAttachment(file);
+    setPreparing(false);
+    if (!p.ok) {
+      setErrors({ form: p.error });
+      return;
+    }
+    const caption = draft.trim().slice(0, MESSAGE_MAX);
+    setDraft("");
+    setErrors({});
+    void sendFile(p.file, caption);
+  };
+
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     if (!conv) {
@@ -402,6 +535,7 @@ export function ChatWidget() {
     : "sm:bottom-[5.75rem] sm:h-[min(600px,calc(100dvh_-_7.5rem))]";
 
   const showThread = Boolean(conv) || ((Boolean(convId) || expecting) && !loaded);
+  const notifyAt = useMemo(() => notifyAfter(messages), [messages]);
   const label = unread > 0 ? `Chat with us, ${unread} new ${unread === 1 ? "reply" : "replies"}` : "Chat with us";
 
   return (
@@ -473,30 +607,43 @@ export function ChatWidget() {
                 </button>
               </p>
             )}
-            {messages.map((m) =>
-              m.sender === "SYSTEM" ? (
-                <p key={m.id} className="text-center text-[12px] text-ink/50">
-                  {m.body}
-                </p>
-              ) : m.kind === "INVOICE" && m.invoice ? (
-                <CardRow key={m.id} meta={timeOf(m.createdAt)} invoice>
-                  <VisitorInvoice invoice={m.invoice} onAnswer={(a) => answerInvoice(m.id, a)} />
-                </CardRow>
-              ) : m.kind === "PAYMENT" ? (
-                <CardRow key={m.id} meta={timeOf(m.createdAt)}>
-                  <PaymentCard title={m.invoice ? `Payment details · ${m.invoice.number}` : "Payment details"} body={m.body} />
-                </CardRow>
-              ) : (
-                <Bubble
-                  key={m.id}
-                  mine={m.sender === "VISITOR"}
-                  body={m.body}
-                  meta={m.pending === "sending" ? "Sending…" : m.pending === "failed" ? undefined : timeOf(m.createdAt)}
-                  failed={m.pending === "failed" ? (m.error ?? NETWORK) : undefined}
-                  onRetry={m.pending === "failed" ? () => void send(m.body, m.id) : undefined}
-                />
-              ),
-            )}
+            {messages.map((m) => (
+              <Fragment key={m.id}>
+                {m.sender === "SYSTEM" ? (
+                  <p className="text-center text-[12px] text-ink/50">{m.body}</p>
+                ) : m.kind === "INVOICE" && m.invoice ? (
+                  <CardRow meta={timeOf(m.createdAt)} invoice intro={m.invoice.version > 1 ? INVOICE_COPY.updated : undefined}>
+                    <VisitorInvoice invoice={m.invoice} onAnswer={(a) => answerInvoice(m.id, a)} />
+                  </CardRow>
+                ) : m.kind === "PAYMENT" ? (
+                  <CardRow meta={timeOf(m.createdAt)}>
+                    <PaymentCard title={m.invoice ? `Payment details · ${m.invoice.number}` : "Payment details"} body={m.body} />
+                  </CardRow>
+                ) : (
+                  <Bubble
+                    mine={m.sender === "VISITOR"}
+                    body={m.body}
+                    file={m.file ?? null}
+                    sending={m.pending === "sending"}
+                    onOpenFile={setViewing}
+                    meta={m.pending === "sending" ? "Sending…" : m.pending === "failed" ? undefined : timeOf(m.createdAt)}
+                    failed={m.pending === "failed" ? (m.error ?? NETWORK) : undefined}
+                    onRetry={
+                      m.pending !== "failed"
+                        ? undefined
+                        : m.file
+                          ? () => {
+                              const u = uploads.current.get(m.id);
+                              if (u) void sendFile(u.prepared, u.caption, m.id);
+                            }
+                          : () => void send(m.body, m.id)
+                    }
+                    onRemove={m.pending === "failed" && m.file ? () => removeFailed(m.id) : undefined}
+                  />
+                )}
+                {m.id === notifyAt && <NotifyCard conversationId={conv?.id ?? null} onShown={followBottom} />}
+              </Fragment>
+            ))}
             {conv?.status === "CLOSED" && (
               <p className="text-center text-[12px] text-ink/50">This chat was closed. Write again and we&apos;ll pick it back up.</p>
             )}
@@ -561,6 +708,25 @@ export function ChatWidget() {
             )}
 
             <div className="flex items-end gap-2">
+              {conv && (
+                <>
+                  <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} onChange={(e) => void onPickFile(e)} className="sr-only" tabIndex={-1} aria-hidden />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={preparing}
+                    aria-label="Attach a picture or PDF"
+                    title="Attach a picture or PDF"
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-black/10 text-ink/70 transition hover:border-ink/30 hover:text-ink active:scale-95 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {preparing ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink/20 border-t-ink motion-reduce:animate-none" aria-hidden />
+                    ) : (
+                      <PaperclipIcon className="h-5 w-5" />
+                    )}
+                  </button>
+                </>
+              )}
               <label htmlFor="akz-chat-message" className="sr-only">
                 Your message
               </label>
@@ -605,39 +771,75 @@ export function ChatWidget() {
               </p>
             )}
           </form>
+          <ImageViewer file={viewing} onClose={() => setViewing(null)} />
         </div>
       )}
     </>
   );
 }
 
-/** An order card from the store, left-aligned like the store's replies, a little wider than a bubble. */
-function CardRow({ meta, invoice = false, children }: { meta: string; invoice?: boolean; children: ReactNode }) {
+/**
+ * An order card from the store, left-aligned like the store's replies, a little wider than a bubble. `intro` is
+ * the store's line above it ("Here's your updated invoice.": the message body's first line, shown once).
+ */
+function CardRow({ meta, invoice = false, intro, children }: { meta: string; invoice?: boolean; intro?: string; children: ReactNode }) {
   return (
     <div className="flex flex-col items-start" data-invoice-card={invoice ? "" : undefined}>
+      {intro && <p className="mb-1.5 max-w-[85%] rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-[14px] leading-relaxed text-ink shadow-[0_1px_2px_rgba(18,18,18,0.08)]">{intro}</p>}
       <div className="w-full max-w-[340px]">{children}</div>
       <span className="mt-1 px-1 text-[11px] tabular-nums text-ink/45">{meta}</span>
     </div>
   );
 }
 
-function Bubble({ mine, body, meta, failed, onRetry }: { mine: boolean; body: string; meta?: string; failed?: string; onRetry?: () => void }) {
+function Bubble({
+  mine,
+  body,
+  file = null,
+  sending = false,
+  onOpenFile,
+  meta,
+  failed,
+  onRetry,
+  onRemove,
+}: {
+  mine: boolean;
+  body: string;
+  file?: ChatFileDTO | null;
+  sending?: boolean;
+  onOpenFile?: (file: ChatFileDTO) => void;
+  meta?: string;
+  failed?: string;
+  onRetry?: () => void;
+  onRemove?: () => void;
+}) {
+  const tone = mine ? "rounded-br-md bg-brand text-white" : "rounded-bl-md bg-white text-ink shadow-[0_1px_2px_rgba(18,18,18,0.08)]";
   return (
     <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-      <p
-        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[14px] leading-relaxed ${
-          mine ? "rounded-br-md bg-brand text-white" : "rounded-bl-md bg-white text-ink shadow-[0_1px_2px_rgba(18,18,18,0.08)]"
-        } ${failed ? "opacity-70" : ""}`}
-      >
-        {body}
-      </p>
+      {file ? (
+        <div className={`max-w-[85%] overflow-hidden rounded-2xl p-1 ${tone} ${failed ? "opacity-70" : ""}`}>
+          {file.kind === "image" ? (
+            <ChatImage file={file} sending={sending} onOpen={() => onOpenFile?.(file)} />
+          ) : (
+            <FileChip file={file} mine={mine} sending={sending} />
+          )}
+          {body && <p className="whitespace-pre-wrap break-words px-2.5 pb-1.5 pt-1.5 text-[14px] leading-relaxed">{body}</p>}
+        </div>
+      ) : (
+        <p className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[14px] leading-relaxed ${tone} ${failed ? "opacity-70" : ""}`}>{body}</p>
+      )}
       {meta && <span className="mt-1 px-1 text-[11px] tabular-nums text-ink/45">{meta}</span>}
       {failed && (
-        <span className="mt-1 flex items-center gap-2 px-1 text-[11.5px] text-brand" role="alert">
+        <span className="mt-1 flex flex-wrap items-center justify-end gap-x-2 px-1 text-[11.5px] text-brand" role="alert">
           Not sent. {failed === NETWORK ? "Check your connection." : failed}
           {onRetry && (
             <button type="button" onClick={onRetry} className="font-semibold underline underline-offset-2">
               Retry
+            </button>
+          )}
+          {onRemove && (
+            <button type="button" onClick={onRemove} className="text-ink/55 underline underline-offset-2">
+              Remove
             </button>
           )}
         </span>

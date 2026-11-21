@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { EmptyState, PageHeader, StatusPill, btn } from "@/components/admin/ui";
+import { ATTACH_ACCEPT, localFile, prepareAttachment, uploadAttachment, type Prepared } from "@/components/chat/attach";
+import { ChatImage, FileChip, ImageViewer, PaperclipIcon } from "@/components/chat/Attachments";
 import { InvoiceReceipt, PaymentCard } from "@/components/chat/OrderCards";
-import { MESSAGE_MAX, type ChatMessageDTO, type ChatStatus, type InvoiceDTO } from "@/lib/chat/shared";
+import { INVOICE_COPY, MESSAGE_MAX, type ChatFileDTO, type ChatMessageDTO, type ChatStatus, type InvoiceDTO } from "@/lib/chat/shared";
 
 /*
  * Admin → Live chat. Inbox on the left, the open conversation on the right (on a phone: the list, then the
@@ -17,7 +19,11 @@ import { MESSAGE_MAX, type ChatMessageDTO, type ChatStatus, type InvoiceDTO } fr
  *
  * Orders live in the chat: an order's invoice shows as a receipt card with the shopper's answer ("is everything
  * correct?"), a link to the order and "Send payment details" (the form is on the order page, #payment). The
- * payment details, once sent, show as a highlighted card.
+ * payment details, once sent, show as a highlighted card. An invoice an updated one replaced shows REPLACED and
+ * no actions: only the newest counts.
+ *
+ * Pictures and PDFs both ways: the paperclip sends one (pictures made small in the browser, the text box as its
+ * caption), shown as "Sending…" until saved, with Retry if it fails. Tap a picture to see it full screen.
  */
 
 type Row = {
@@ -49,6 +55,10 @@ type Detail = {
 
 const REFRESH_MS = 60_000;
 const NETWORK = "We couldn't reach the server. Check your connection and try again.";
+
+/** A file of ours on its way (or failed), shown after the saved messages. */
+type PendingUpload = ChatMessageDTO & { pending: "sending" | "failed"; error?: string };
+let uploadSeq = 0;
 
 type Result<T> = { ok: true; data: T } | { ok: false; status: number; error: string };
 
@@ -286,6 +296,12 @@ function ThreadPane({ id, onBack, onChanged, onGone }: { id: string; onBack: () 
 
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploads, setUploads] = useState<PendingUpload[]>([]);
+  const [preparing, setPreparing] = useState(false);
+  const [viewing, setViewing] = useState<ChatFileDTO | null>(null);
+  /** What to send again on Retry, and the preview to free, by local id. */
+  const uploadData = useRef(new Map<string, { prepared: Prepared; caption: string; url: string }>());
 
   const load = useCallback(async () => {
     const r = await api<{ conversation: Detail; messages: ChatMessageDTO[]; cleared: boolean }>(`/api/admin/chat/${id}`);
@@ -312,10 +328,61 @@ function ThreadPane({ id, onBack, onChanged, onGone }: { id: string; onBack: () 
   useChatPing(useCallback((pinged: string | null) => (pinged === null || pinged === id) && void load(), [id, load]));
 
   const lastId = messages.at(-1)?.id;
+  const lastUpload = uploads.at(-1);
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [lastId]);
+  }, [lastId, lastUpload?.id, lastUpload?.pending]);
+
+  useEffect(() => {
+    const map = uploadData.current;
+    return () => map.forEach((u) => URL.revokeObjectURL(u.url));
+  }, []);
+
+  const dropUpload = (localId: string) => {
+    const u = uploadData.current.get(localId);
+    if (u) URL.revokeObjectURL(u.url);
+    uploadData.current.delete(localId);
+    setUploads((prev) => prev.filter((x) => x.id !== localId));
+  };
+
+  const sendFile = async (prepared: Prepared, caption: string, retryId?: string) => {
+    const localId = retryId ?? `upload-${++uploadSeq}`;
+    if (retryId) {
+      setUploads((prev) => prev.map((u) => (u.id === retryId ? { ...u, pending: "sending", error: undefined } : u)));
+    } else {
+      const url = URL.createObjectURL(prepared.blob);
+      uploadData.current.set(localId, { prepared, caption, url });
+      setUploads((prev) => [
+        ...prev,
+        { id: localId, sender: "ADMIN", body: caption, createdAt: new Date().toISOString(), kind: "TEXT", file: localFile(prepared, localId, url), pending: "sending" },
+      ]);
+    }
+    const r = await uploadAttachment(`/api/admin/chat/${id}/files`, prepared, caption);
+    if (r.ok) {
+      dropUpload(localId);
+      setMessages((prev) => (prev.some((m) => m.id === r.message.id) ? prev : [...prev, r.message]));
+      setConv((c) => (c ? { ...c, unreadForVisitor: c.unreadForVisitor + 1 } : c));
+      onChanged();
+      return;
+    }
+    if (r.status === 404) setMissing(true);
+    setUploads((prev) => prev.map((u) => (u.id === localId ? { ...u, pending: "failed", error: r.error } : u)));
+  };
+
+  const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // the same file can be picked again
+    if (!file || preparing) return;
+    setPreparing(true);
+    const p = await prepareAttachment(file);
+    setPreparing(false);
+    if (!p.ok) return setReplyError(p.error);
+    const caption = draft.trim().slice(0, MESSAGE_MAX);
+    setDraft("");
+    setReplyError(null);
+    void sendFile(p.file, caption);
+  };
 
   const reply = async () => {
     const text = draft.trim();
@@ -497,10 +564,14 @@ function ThreadPane({ id, onBack, onChanged, onGone }: { id: string; onBack: () 
                 <p className="text-center text-xs text-zinc-400">{m.body}</p>
               ) : m.kind === "INVOICE" && m.invoice ? (
                 <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+                  {/* The message's first line ("Here's your updated invoice."); the rest of its text is the card. */}
+                  {m.invoice.version > 1 && <p className="mb-1.5 max-w-[85%] rounded-2xl rounded-br-md bg-ink px-3.5 py-2 text-sm leading-relaxed text-white sm:max-w-[70%]">{INVOICE_COPY.updated}</p>}
                   <div className="w-full max-w-sm">
                     <AdminInvoice invoice={m.invoice} paymentSent={messages.some((x) => x.kind === "PAYMENT" && x.invoice?.orderId === m.invoice?.orderId)} />
                   </div>
-                  <span className="mt-0.5 px-1 text-[11px] tabular-nums text-zinc-400">{timeOf(m.createdAt)} · Sent automatically with the order</span>
+                  <span className="mt-0.5 px-1 text-[11px] tabular-nums text-zinc-400">
+                    {timeOf(m.createdAt)} · {m.invoice.version > 1 ? "Updated invoice" : "Sent automatically with the order"}
+                  </span>
                 </div>
               ) : m.kind === "PAYMENT" ? (
                 <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
@@ -513,22 +584,40 @@ function ThreadPane({ id, onBack, onChanged, onGone }: { id: string; onBack: () 
                   </span>
                 </div>
               ) : (
-                <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-                  <p
-                    className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-sm leading-relaxed sm:max-w-[70%] ${mine ? "rounded-br-md bg-ink text-white" : "rounded-bl-md border border-zinc-200 bg-white text-ink"}`}
-                  >
-                    {m.body}
-                  </p>
-                  <span className="mt-0.5 px-1 text-[11px] tabular-nums text-zinc-400">
-                    {timeOf(m.createdAt)}
-                    {mine && m.id === last?.id && conv && (conv.unreadForVisitor > 0 ? " · Not seen yet" : " · Seen")}
-                  </span>
-                </div>
+                <AdminBubble message={m} mine={mine} onOpenFile={setViewing}>
+                  {timeOf(m.createdAt)}
+                  {mine && m.id === last?.id && uploads.length === 0 && conv && (conv.unreadForVisitor > 0 ? " · Not seen yet" : " · Seen")}
+                </AdminBubble>
               )}
             </div>
           );
         })}
+        {uploads.map((u) => (
+          <AdminBubble key={u.id} message={u} mine sending={u.pending === "sending"} onOpenFile={setViewing}>
+            {u.pending === "sending" ? (
+              "Sending…"
+            ) : (
+              <span className="inline-flex flex-wrap items-center justify-end gap-x-2 text-brand" role="alert">
+                Not sent. {u.error === NETWORK ? "Check your connection." : u.error}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = uploadData.current.get(u.id);
+                    if (d) void sendFile(d.prepared, d.caption, u.id);
+                  }}
+                  className="font-semibold underline underline-offset-2"
+                >
+                  Retry
+                </button>
+                <button type="button" onClick={() => dropUpload(u.id)} className="text-zinc-500 underline underline-offset-2">
+                  Remove
+                </button>
+              </span>
+            )}
+          </AdminBubble>
+        ))}
       </div>
+      <ImageViewer file={viewing} onClose={() => setViewing(null)} />
 
       {/* Reply */}
       <form
@@ -545,6 +634,21 @@ function ThreadPane({ id, onBack, onChanged, onGone }: { id: string; onBack: () 
           </p>
         )}
         <div className="flex items-end gap-2">
+          <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} onChange={(e) => void onPickFile(e)} className="sr-only" tabIndex={-1} aria-hidden />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={!conv || preparing}
+            aria-label="Attach a picture or PDF"
+            title="Attach a picture or PDF"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-zinc-300 bg-white text-zinc-600 shadow-sm transition hover:border-zinc-400 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {preparing ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-ink motion-reduce:animate-none" aria-hidden />
+            ) : (
+              <PaperclipIcon className="h-5 w-5" />
+            )}
+          </button>
           <label htmlFor="admin-chat-reply" className="sr-only">
             Reply
           </label>
@@ -579,11 +683,61 @@ const ANSWER: Record<"waiting" | "confirmed" | "wrong", { text: string; tone: st
   wrong: { text: "Says something's wrong", tone: "bg-red-50 text-red-800 ring-red-200" },
 };
 
-/** An order's invoice in the thread: the receipt, what the shopper answered, and the next step. */
+/** A text message, or a picture / PDF with its caption. `children` is the line under it (time, seen, errors). */
+function AdminBubble({
+  message: m,
+  mine,
+  sending = false,
+  onOpenFile,
+  children,
+}: {
+  message: ChatMessageDTO;
+  mine: boolean;
+  sending?: boolean;
+  onOpenFile: (file: ChatFileDTO) => void;
+  children: ReactNode;
+}) {
+  const tone = mine ? "rounded-br-md bg-ink text-white" : "rounded-bl-md border border-zinc-200 bg-white text-ink";
+  const file = m.file;
+  return (
+    <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+      {file ? (
+        <div className={`max-w-[85%] overflow-hidden rounded-2xl p-1 sm:max-w-[70%] ${tone}`}>
+          {file.kind === "image" ? <ChatImage file={file} sending={sending} onOpen={() => onOpenFile(file)} /> : <FileChip file={file} mine={mine} sending={sending} />}
+          {m.body && <p className="whitespace-pre-wrap break-words px-2.5 pb-1.5 pt-1.5 text-sm leading-relaxed">{m.body}</p>}
+        </div>
+      ) : (
+        <p className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-sm leading-relaxed sm:max-w-[70%] ${tone}`}>{m.body}</p>
+      )}
+      <span className="mt-0.5 px-1 text-[11px] tabular-nums text-zinc-400">{children}</span>
+    </div>
+  );
+}
+
+/**
+ * An order's invoice in the thread: the receipt, what the shopper answered, and the next step. Only the newest
+ * invoice of an order has an answer and actions; a replaced one just says so.
+ */
 function AdminInvoice({ invoice, paymentSent }: { invoice: InvoiceDTO; paymentSent: boolean }) {
   const answer = ANSWER[invoice.answer ?? "waiting"];
   const pending = invoice.status === "PENDING";
   const order = invoice.orderId ? `/admin/orders/${encodeURIComponent(invoice.orderId)}` : null;
+
+  if (!invoice.latest) {
+    return (
+      <InvoiceReceipt invoice={invoice}>
+        <div className="space-y-2.5 border-t border-zinc-200 bg-zinc-50 px-4 py-3">
+          <p className="text-xs text-zinc-500">Replaced by an updated invoice. Only the newest one counts.</p>
+          {order && (
+            <Link prefetch={false} href={order} className={`${btn.secondary} h-9 w-full`}>
+              Open order {invoice.number}
+            </Link>
+          )}
+        </div>
+      </InvoiceReceipt>
+    );
+  }
+
   return (
     <InvoiceReceipt invoice={invoice}>
       <div className="space-y-2.5 border-t border-zinc-200 bg-zinc-50 px-4 py-3">
@@ -609,6 +763,11 @@ function AdminInvoice({ invoice, paymentSent }: { invoice: InvoiceDTO; paymentSe
             <Link prefetch={false} href={order} className={`${btn.secondary} h-9 w-full`}>
               Open order {invoice.number}
             </Link>
+            {pending && (
+              <Link prefetch={false} href={`${order}#payment`} className="self-center text-xs font-semibold text-zinc-500 underline-offset-2 hover:text-ink hover:underline">
+                Send updated invoice
+              </Link>
+            )}
           </div>
         )}
       </div>

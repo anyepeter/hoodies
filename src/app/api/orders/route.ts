@@ -9,7 +9,7 @@ import { orderSchema } from "@/lib/orders/checkout-schema";
 import { countryName } from "@/lib/orders/countries";
 import { expireUnpaidOrders } from "@/lib/orders/expire";
 import { discountCents, ratePercent } from "@/lib/orders/payment-rails";
-import { MAX_QTY, decimal, describeUnits, moneyCents, priceCart, summarizeLines } from "@/lib/orders/pricing";
+import { MAX_HOODIES_PER_ORDER, MAX_QTY, decimal, describeUnits, moneyCents, priceCart, summarizeLines } from "@/lib/orders/pricing";
 import { orderNumber } from "@/lib/orders/status";
 import { revalidateStorefront } from "@/lib/stock";
 import { STYLES, type Style } from "@/lib/store";
@@ -27,9 +27,6 @@ class OutOfStock extends Error {
     super("out of stock");
   }
 }
-
-/** Most hoodies one order may take. */
-const MAX_HOODIES_PER_ORDER = 6;
 
 /**
  * Places an order. Prices come from src/lib/store.ts only: the body carries cart keys and quantities, never

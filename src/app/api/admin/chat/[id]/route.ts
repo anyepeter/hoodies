@@ -5,6 +5,7 @@ import { deviceLabel } from "@/lib/chat/device";
 import { messageSelect, withInvoices } from "@/lib/chat/order-chat";
 import { messageDTO, pingConversation } from "@/lib/chat/server";
 import { CONVERSATION_ID, MESSAGE_MAX, previewOf } from "@/lib/chat/shared";
+import { pushToConversation } from "@/lib/chat/visitor-push";
 import { prisma } from "@/lib/db";
 import { fail, ok, readJson, sameOrigin, serverError } from "@/lib/http";
 import { notifyAdmins } from "@/lib/notify";
@@ -15,7 +16,8 @@ export const dynamic = "force-dynamic";
  * One conversation, for the admin.
  *   GET    → visitor info + messages (invoice / payment cards attached). Opening it marks it read
  *            (unreadForAdmin = 0) and refreshes the badges.
- *   POST   → reply { message }. The visitor's widget is pinged and shows it.
+ *   POST   → reply { message }. The visitor's widget is pinged and shows it; their phone is notified if they
+ *            turned that on and aren't on the site. Pictures and PDFs: POST /api/admin/chat/<id>/files.
  *   PATCH  → { status: "OPEN" | "CLOSED" }
  *   DELETE → removes the conversation and its messages for good.
  * Every change also pings private-admin "chat.message" (from: "ADMIN", so no toast) so other admin tabs and
@@ -103,6 +105,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     ]);
     pingConversation(id, "ADMIN");
     notifyAdmins("chat.message", null, { id, from: "ADMIN" });
+    pushToConversation(id, previewOf(parsed.data.message));
     return ok({ message: messageDTO(message) }, 201);
   } catch (err) {
     return serverError("admin-chat:reply", err);

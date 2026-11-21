@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PaymentLogo } from "@/components/checkout/PaymentLogos";
+import { invoiceNo } from "@/lib/chat/shared";
 import { discountPercentOf } from "@/lib/orders/payment-rails";
 import { getOrderByToken } from "@/lib/orders/queries";
 import { orderNumber } from "@/lib/orders/status";
@@ -30,6 +31,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ token:
   if (!order) notFound();
 
   const number = orderNumber(order.number);
+  // INV-1001, then INV-1001-2… once the shop sends an updated invoice. The order number stays #1001.
+  const invoice = invoiceNo(order.number, order.invoiceVersion);
   const stamp = STAMP[order.status]!;
   const subtotal = Number(order.subtotal);
   const discount = Number(order.paymentDiscount);
@@ -58,7 +61,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ token:
             <h1 className="text-[28px] font-extrabold uppercase tracking-[0.15em]">Invoice</h1>
             <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-[13px] sm:justify-end">
               <dt className="text-ink/55">Invoice no.</dt>
-              <dd className="font-semibold">{number}</dd>
+              <dd className="font-semibold" data-testid="invoice-number">
+                {invoice}
+              </dd>
+              <dt className="text-ink/55">Order no.</dt>
+              <dd>{number}</dd>
               <dt className="text-ink/55">Date</dt>
               <dd>{date(order.createdAt)}</dd>
               {order.paidAt ? (

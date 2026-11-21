@@ -7,15 +7,20 @@ import { Card, PageHeader, StatusPill, btn, shortDate, usd } from "@/components/
 import { PaymentLogo } from "@/components/checkout/PaymentLogos";
 import { isAdmin, requireAdminPage } from "@/lib/admin-session";
 import { paymentMessage } from "@/lib/chat/order-chat";
+import { invoiceNo } from "@/lib/chat/shared";
 import { prisma } from "@/lib/db";
-import { discountPercentOf } from "@/lib/orders/payment-rails";
-import { describeUnits, parseStockTaken } from "@/lib/orders/pricing";
+import { COUNTRIES } from "@/lib/orders/countries";
+import { clampRate, discountPercentOf } from "@/lib/orders/payment-rails";
+import { describeUnits, itemKey, parseStockTaken } from "@/lib/orders/pricing";
 import { STATUS_LABEL, orderNumber } from "@/lib/orders/status";
-import { money } from "@/lib/store";
+import { getStock } from "@/lib/stock";
+import { STOCK, money } from "@/lib/store";
 import { AutoRefresh } from "../AutoRefresh";
 import { CopyButton } from "./CopyButton";
 import { NoteForm } from "./NoteForm";
+import { OrderEditor } from "./OrderEditor";
 import { PaymentDetailsForm } from "./PaymentDetailsForm";
+import { SendUpdatedInvoice } from "./SendUpdatedInvoice";
 import { StatusActions } from "./StatusActions";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +50,17 @@ const EVENT_DOT: Record<string, string> = {
   stock: "bg-emerald-500",
   note: "bg-amber-400",
   chat: "bg-brand",
+  edited: "bg-sky-700",
+  invoice: "bg-brand",
 };
 
-function eventTitle(e: { type: string; toStatus: OrderStatus | null }): string {
+/** postUpdatedInvoice() records the updated invoice as a note: shown under its own title. */
+const isInvoiceEvent = (e: { type: string; message: string | null }) => e.type === "note" && Boolean(e.message?.startsWith("Updated invoice sent"));
+
+function eventTitle(e: { type: string; toStatus: OrderStatus | null; message: string | null }): string {
   if (e.type === "created") return "Order placed";
+  if (e.type === "edited") return "Order edited";
+  if (isInvoiceEvent(e)) return "Updated invoice";
   if (e.type === "payment") return "Payment confirmed";
   if (e.type === "stock") return "Stock";
   if (e.type === "note") return "Note";
@@ -74,11 +86,35 @@ export default async function OrderDetail({ params }: Params) {
     [order.postalCode, order.city].filter(Boolean).join(" ") + (order.region ? `, ${order.region}` : ""),
     order.country,
   ].filter(Boolean) as string[];
-  const [previous, option, conversation] = await Promise.all([
+  // Only an order waiting for payment can be edited (and only while it still holds its stock).
+  const editable = order.status === "PENDING" && !order.stockRestored;
+  const [previous, option, conversation, latestInvoice, editOptions, stock] = await Promise.all([
     prisma.order.count({ where: { email: order.email, id: { not: order.id } } }),
     order.paymentOptionId ? prisma.paymentOption.findUnique({ where: { id: order.paymentOptionId }, select: { instructions: true, details: true } }) : null,
     order.conversationId ? prisma.conversation.findUnique({ where: { id: order.conversationId }, select: { id: true } }) : null,
+    prisma.chatMessage.findFirst({ where: { orderId: order.id, kind: "INVOICE" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
+    // The editor offers the active methods, plus the order's own if it was turned off since (keeping it is allowed).
+    editable
+      ? prisma.paymentOption.findMany({
+          where: { OR: [{ active: true }, ...(order.paymentOptionId ? [{ id: order.paymentOptionId }] : [])] },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          select: { id: true, name: true, active: true, discountRate: true },
+        })
+      : [],
+    editable ? getStock() : { ...STOCK },
   ]);
+  const invoiceNumber = invoiceNo(order.number, order.invoiceVersion);
+  const nextInvoiceNumber = invoiceNo(order.number, order.invoiceVersion + 1);
+  // Edited after the newest invoice went out: the shopper hasn't seen these changes yet.
+  const lastEdit = order.events.findLast((e) => e.type === "edited");
+  const unsentEdits = Boolean(lastEdit && (!latestInvoice || lastEdit.createdAt > latestInvoice.createdAt));
+  const wrong = order.invoiceAnswer === "wrong";
+  const invoiceBlocked =
+    order.status !== "PENDING"
+      ? "Only an order that's still waiting for payment can get an updated invoice."
+      : !conversation
+        ? "This order has no chat, so there's nowhere to send an updated invoice."
+        : null;
   // The message as the method reads today (account details may have changed since the order); if the
   // method was deleted, the copy made when the order was placed.
   const detailsMessage = option
@@ -93,7 +129,7 @@ export default async function OrderDetail({ params }: Params) {
         title={`Order ${number}`}
         subtitle={
           <span className="inline-flex flex-wrap items-center gap-2">
-            <StatusPill status={order.status} /> Placed {shortDate(order.createdAt)}
+            <StatusPill status={order.status} /> Placed {shortDate(order.createdAt)} · Invoice {invoiceNumber}
           </span>
         }
         actions={
@@ -116,61 +152,86 @@ export default async function OrderDetail({ params }: Params) {
             </div>
           </Card>
 
-          <Card title={`Items · ${usd(order.total)}`}>
-            <ul className="divide-y divide-zinc-100">
-              {order.items.map((it) => (
-                <li key={it.id} className="flex gap-3 px-5 py-3">
-                  <Image
-                    src={it.image}
-                    alt=""
-                    width={48}
-                    height={48}
-                    className={`h-12 w-12 shrink-0 rounded-lg bg-zinc-100 ${it.kind === "addon" ? "object-contain p-1" : "object-cover"}`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-ink">{it.title}</p>
-                    {it.detail && <p className="text-xs text-zinc-500">{it.detail}</p>}
-                    <p className="text-xs text-zinc-500">
-                      {it.quantity} × {usd(it.unitPrice)}
-                    </p>
-                  </div>
-                  <p className="text-sm font-semibold tabular-nums">{usd(it.lineTotal)}</p>
-                </li>
-              ))}
-            </ul>
-            <dl className="space-y-1 border-t border-zinc-100 px-5 py-4 text-sm">
-              <div className="flex justify-between text-zinc-600">
-                <dt>Subtotal</dt>
-                <dd className="tabular-nums">{usd(order.subtotal)}</dd>
-              </div>
-              {discount > 0 && (
+          <div id="items" className="scroll-mt-6">
+            <OrderEditor
+              orderId={order.id}
+              title={`Items · ${usd(order.total)}`}
+              editable={editable}
+              reason={editable ? null : `Only orders waiting for payment can be edited. This one is ${STATUS_LABEL[order.status].toLowerCase()}.`}
+              emphasize={wrong}
+              customer={{
+                name: order.name,
+                email: order.email,
+                phone: order.phone ?? "",
+                country: COUNTRIES.find((c) => c.name === order.country)?.code ?? "",
+                address1: order.address1,
+                address2: order.address2 ?? "",
+                city: order.city,
+                region: order.region ?? "",
+                postalCode: order.postalCode,
+                notes: order.notes ?? "",
+                paymentOptionId: order.paymentOptionId ?? "",
+              }}
+              lines={order.items.map((it) => ({ key: itemKey(it), qty: it.quantity, title: it.title }))}
+              options={editOptions.map((o) => ({ id: o.id, name: o.name, discountRate: clampRate(o.discountRate), off: !o.active }))}
+              stock={stock}
+              taken={taken}
+            >
+              <ul className="divide-y divide-zinc-100">
+                {order.items.map((it) => (
+                  <li key={it.id} className="flex gap-3 px-5 py-3">
+                    <Image
+                      src={it.image}
+                      alt=""
+                      width={48}
+                      height={48}
+                      className={`h-12 w-12 shrink-0 rounded-lg bg-zinc-100 ${it.kind === "addon" ? "object-contain p-1" : "object-cover"}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-ink">{it.title}</p>
+                      {it.detail && <p className="text-xs text-zinc-500">{it.detail}</p>}
+                      <p className="text-xs text-zinc-500">
+                        {it.quantity} × {usd(it.unitPrice)}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold tabular-nums">{usd(it.lineTotal)}</p>
+                  </li>
+                ))}
+              </ul>
+              <dl className="space-y-1 border-t border-zinc-100 px-5 py-4 text-sm">
                 <div className="flex justify-between text-zinc-600">
-                  <dt>
-                    {order.paymentMethod} discount ({discountPercentOf(discount, Number(order.subtotal))})
-                  </dt>
-                  <dd className="tabular-nums">−{usd(discount)}</dd>
+                  <dt>Subtotal</dt>
+                  <dd className="tabular-nums">{usd(order.subtotal)}</dd>
                 </div>
-              )}
-              <div className="flex justify-between text-zinc-600">
-                <dt>Shipping</dt>
-                <dd>{Number(order.shipping) > 0 ? usd(order.shipping) : "Free"}</dd>
-              </div>
-              {saved > 0.004 && (
-                <div className="flex justify-between text-zinc-500">
-                  <dt>Customer saved (vs full price {usd(order.compareAtTotal)})</dt>
-                  <dd className="tabular-nums">{usd(saved)}</dd>
+                {discount > 0 && (
+                  <div className="flex justify-between text-zinc-600">
+                    <dt>
+                      {order.paymentMethod} discount ({discountPercentOf(discount, Number(order.subtotal))})
+                    </dt>
+                    <dd className="tabular-nums">−{usd(discount)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between text-zinc-600">
+                  <dt>Shipping</dt>
+                  <dd>{Number(order.shipping) > 0 ? usd(order.shipping) : "Free"}</dd>
                 </div>
-              )}
-              <div className="flex justify-between pt-1 text-base font-bold text-ink">
-                <dt>Total</dt>
-                <dd className="tabular-nums">{usd(order.total)}</dd>
-              </div>
-            </dl>
-            <p className="border-t border-zinc-100 px-5 py-3 text-xs text-zinc-500">
-              Stock taken: {stockText || "none"}
-              {order.stockRestored ? " · put back" : ""}. Prices were worked out on the server from the catalogue.
-            </p>
-          </Card>
+                {saved > 0.004 && (
+                  <div className="flex justify-between text-zinc-500">
+                    <dt>Customer saved (vs full price {usd(order.compareAtTotal)})</dt>
+                    <dd className="tabular-nums">{usd(saved)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between pt-1 text-base font-bold text-ink">
+                  <dt>Total</dt>
+                  <dd className="tabular-nums">{usd(order.total)}</dd>
+                </div>
+              </dl>
+              <p className="border-t border-zinc-100 px-5 py-3 text-xs text-zinc-500">
+                Stock taken: {stockText || "none"}
+                {order.stockRestored ? " · put back" : ""}. Prices were worked out on the server from the catalogue.
+              </p>
+            </OrderEditor>
+          </div>
 
           <div id="payment" className="scroll-mt-6">
             <Card
@@ -203,26 +264,56 @@ export default async function OrderDetail({ params }: Params) {
                   )}
                 </div>
 
-                <div className="rounded-lg bg-zinc-50 px-3 py-2.5" data-testid="invoice-answer">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Invoice in the chat</p>
+                <div className={`rounded-lg px-3 py-2.5 ${wrong ? "border border-red-200 bg-red-50" : "bg-zinc-50"}`} data-testid="invoice-answer">
+                  <p className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    <span>Invoice in the chat</span>
+                    <span className="font-mono text-[13px] normal-case tracking-normal text-ink" data-testid="invoice-number">
+                      {invoiceNumber}
+                    </span>
+                  </p>
                   {!order.conversationId ? (
                     <p className="mt-0.5 text-zinc-600">This order was placed before invoices went to the chat.</p>
                   ) : order.invoiceAnswer === "confirmed" ? (
                     <p className="mt-0.5 font-semibold text-emerald-700">
                       Confirmed ✓{order.invoiceAnsweredAt && <span className="font-normal text-zinc-600"> · {shortDate(order.invoiceAnsweredAt)}</span>}
                     </p>
-                  ) : order.invoiceAnswer === "wrong" ? (
-                    <p className="mt-0.5 font-semibold text-brand">
-                      The shopper says something&apos;s wrong{order.invoiceAnsweredAt && <span className="font-normal text-zinc-600"> · {shortDate(order.invoiceAnsweredAt)}</span>}.{" "}
-                      <span className="font-normal text-zinc-600">Open the chat to see what needs changing.</span>
-                    </p>
+                  ) : wrong ? (
+                    <div className="mt-1" data-testid="invoice-wrong">
+                      <p className="text-base font-bold text-brand">The shopper says something&apos;s wrong with {invoiceNumber}</p>
+                      <p className="mt-0.5 text-zinc-700">
+                        {order.invoiceAnsweredAt && <>{shortDate(order.invoiceAnsweredAt)}. </>}
+                        Read what needs changing in the chat, fix it with{" "}
+                        <a href="#items" className="font-semibold text-ink underline decoration-zinc-300 underline-offset-2 hover:decoration-ink">
+                          Edit order
+                        </a>
+                        , then send the updated invoice.
+                      </p>
+                      {conversation && (
+                        <Link prefetch={false} href={`/admin/chat?c=${conversation.id}`} className={`${btn.primary} mt-2.5`}>
+                          Read the chat
+                        </Link>
+                      )}
+                    </div>
                   ) : (
                     <p className="mt-0.5 font-medium text-amber-800">Waiting for the shopper to check it and tap “Yes, all correct”.</p>
                   )}
                 </div>
 
+                {order.conversationId && (
+                  <SendUpdatedInvoice
+                    id={order.id}
+                    current={invoiceNumber}
+                    next={nextInvoiceNumber}
+                    enabled={!invoiceBlocked}
+                    reason={invoiceBlocked}
+                    prompt={unsentEdits && order.status === "PENDING"}
+                  />
+                )}
+
                 {conversation ? (
                   <PaymentDetailsForm
+                    // Starts again from the new message when an edit changes the total or the method.
+                    key={detailsMessage}
                     id={order.id}
                     initial={detailsMessage}
                     sentAt={order.paymentDetailsSentAt ? shortDate(order.paymentDetailsSentAt) : null}
@@ -250,10 +341,10 @@ export default async function OrderDetail({ params }: Params) {
             <ol className="space-y-4 p-5">
               {order.events.map((e) => (
                 <li key={e.id} className="flex gap-3">
-                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${EVENT_DOT[e.type] ?? "bg-zinc-400"}`} aria-hidden />
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${EVENT_DOT[isInvoiceEvent(e) ? "invoice" : e.type] ?? "bg-zinc-400"}`} aria-hidden />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-ink">{eventTitle(e)}</p>
-                    {e.message && <p className={`whitespace-pre-line text-sm ${e.type === "note" ? "text-ink" : "text-zinc-600"}`}>{e.message}</p>}
+                    {e.message && <p className={`whitespace-pre-line text-sm ${e.type === "note" && !isInvoiceEvent(e) ? "text-ink" : "text-zinc-600"}`}>{e.message}</p>}
                     <p className="text-xs text-zinc-500">{shortDate(e.createdAt)}</p>
                   </div>
                 </li>

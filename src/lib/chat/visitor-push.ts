@@ -11,7 +11,8 @@ import { prisma } from "@/lib/db";
  *   - at most one per chat per PUSH_GAP_MS, however many messages the admin sends in a row.
  */
 
-const ONLINE_MS = 45_000;
+// Longer than the open chat panel's 60 s refresh, so someone reading the chat never counts as away.
+const ONLINE_MS = 75_000;
 const PUSH_GAP_MS = 60_000;
 
 let configured: boolean | undefined;

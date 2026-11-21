@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { addVisitorMessage, myConversation } from "@/lib/chat/server";
 import { MESSAGE_MAX } from "@/lib/chat/shared";
+import { touchVisitor } from "@/lib/chat/visitor-push";
 import { clientIp, fail, ok, rateLimit, readJson, sameOrigin, serverError } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
   try {
     const conv = await myConversation();
     if (!conv) return fail("This chat has ended. Send your message again to start a new one.", 404, { code: "no_conversation" });
-    const message = await addVisitorMessage(conv, parsed.data.message);
+    const [message] = await Promise.all([addVisitorMessage(conv, parsed.data.message), touchVisitor(conv.id)]);
     return ok({ message }, 201);
   } catch (err) {
     return serverError("chat:message", err);

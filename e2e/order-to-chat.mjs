@@ -74,7 +74,7 @@ check(true, "the chat opened by itself");
 const yes = panel.getByRole("button", { name: "Yes, all correct" });
 await yes.waitFor({ timeout: 15000 });
 const panelText = await panel.textContent();
-const number = (panelText.match(/Invoice\s*(#\d{4,})/) ?? [])[1];
+const number = (panelText.match(/Order\s*(#\d{4,})/) ?? [])[1];
 check(Boolean(number), `the invoice is in the chat (${number})`);
 check(panelText.includes("$57.32") && panelText.includes("Cryptocurrency"), "the invoice card shows $57.32 and Cryptocurrency");
 check(panelText.includes("Are your items, delivery address and contact details all correct?"), "it asks “are your items, address and details all correct?”");

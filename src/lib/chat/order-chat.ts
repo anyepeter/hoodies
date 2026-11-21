@@ -26,6 +26,9 @@ import { pushToConversation } from "./visitor-push";
 
 type Tx = Prisma.TransactionClient;
 
+// Neon can be slow to answer under load; the default 5 s made a "Yes, all correct" fail once in testing.
+const TX_OPTS = { maxWait: 10_000, timeout: 15_000 };
+
 /**
  * The shopper's conversation for a new order: the one their chat cookie points at, or a new one. When a new one
  * is made, `token` is returned and the caller must set it as the `akz_chat` cookie on the response.
@@ -213,7 +216,7 @@ export async function answerInvoice(conv: { id: string; name: string | null }, m
       where: { id: conv.id },
       data: { unreadForAdmin: { increment: 1 }, lastMessage: previewOf(yes ? INVOICE_COPY.yesMessage : INVOICE_COPY.noMessage), lastMessageAt: now, status: "OPEN" },
     });
-  });
+  }, TX_OPTS);
 
   after(() => ping(chatChannel(conv.id), CHAT_EVENT, { from: "VISITOR" }));
   const n = orderNumber(order.number);
@@ -277,14 +280,16 @@ export async function postUpdatedInvoice(orderId: string): Promise<{ invoiceNumb
     });
     if (bumped.count === 0) throw new UpdatedInvoiceError("The order changed a moment ago. Reload and try again.");
     const v = order.invoiceVersion + 1;
-    const total = money(Number(order.total));
+    // Re-read under the lock the bump just took: an edit saved a moment ago may have changed the total.
+    const fresh = await tx.order.findUnique({ where: { id: order.id }, select: { total: true } });
+    const total = money(Number(fresh?.total ?? order.total));
     await tx.chatMessage.create({
       data: { conversationId, sender: "ADMIN", kind: "INVOICE", orderId: order.id, body: `${INVOICE_COPY.updated}\nInvoice ${invoiceNo(order.number, v)} · ${total}\n${INVOICE_COPY.question}`, meta: { version: v }, createdAt: now },
     });
     await tx.conversation.update({ where: { id: conversationId }, data: { unreadForVisitor: { increment: 1 }, lastMessage: previewOf(`${INVOICE_COPY.updated} ${invoiceNo(order.number, v)}`), lastMessageAt: now, status: "OPEN" } });
     await tx.orderEvent.create({ data: { orderId: order.id, type: "note", message: `Updated invoice sent in the chat: ${invoiceNo(order.number, v)}` } });
     return v;
-  });
+  }, TX_OPTS);
   after(() => ping(chatChannel(conversationId), CHAT_EVENT, { from: "ADMIN" }));
   notifyAdmins("chat.message", null, { id: conversationId, from: "ADMIN" });
   pushToConversation(conversationId, `${INVOICE_COPY.updated} Please check it and confirm.`);

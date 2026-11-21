@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { INVOICE_COPY, type InvoiceAnswer, type InvoiceDTO } from "@/lib/chat/shared";
 
 /*
  * Orders in the chat: the invoice as a small receipt, and the payment details the admin sends for it. Used by
  * the shopper's chat widget and by the admin inbox, so both see the same card. Everything here is plain text
  * from our own API (never rendered as HTML).
+ *
+ * An order can have several invoices (INV-1001, then INV-1001-2 after "Something's wrong" and a fix). Only the
+ * newest one counts: an older one shows a grey REPLACED stamp, folded up and dimmed, without any buttons.
  */
 
 const NETWORK = "We couldn't reach the server. Check your connection and try again.";
@@ -20,6 +23,8 @@ const STAMP: Record<string, { text: string; tone: string }> = {
   REFUNDED: { text: "Refunded", tone: "border-zinc-400 text-zinc-500" },
 };
 
+const REPLACED = { text: "Replaced", tone: "border-zinc-300 bg-zinc-100 text-zinc-500" };
+
 const dateOf = (iso: string) => new Date(iso).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
 
 /** "−$11.46 (Cryptocurrency)" → ["−$11.46", "Cryptocurrency"], so the reason can sit with the label. */
@@ -28,63 +33,92 @@ function splitDiscount(text: string): [string, string | null] {
   return m ? [m[1], m[2]] : [text, null];
 }
 
-/** The invoice itself: number, date, lines, totals, how they're paying. `children` go along the bottom edge. */
+/**
+ * The invoice itself: number, order and date, lines, totals, how they're paying. `children` go along the bottom
+ * edge. A replaced invoice starts folded (header + "Show details") and dimmed.
+ */
 export function InvoiceReceipt({ invoice, children }: { invoice: InvoiceDTO; children?: ReactNode }) {
-  const stamp = STAMP[invoice.status] ?? { text: invoice.status.toLowerCase(), tone: "border-zinc-300 text-zinc-500" };
+  const replaced = !invoice.latest;
+  const [open, setOpen] = useState(!replaced);
+  const detailsId = useId();
+  const stamp = replaced ? REPLACED : (STAMP[invoice.status] ?? { text: invoice.status.toLowerCase(), tone: "border-zinc-300 text-zinc-500" });
   const [discount, discountWhy] = invoice.discount ? splitDiscount(invoice.discount) : [null, null];
   return (
     <article
-      aria-label={`Invoice ${invoice.number}`}
-      className="w-full overflow-hidden rounded-xl border border-black/10 border-t-[3px] border-t-brand bg-white text-ink shadow-[0_1px_2px_rgba(18,18,18,0.06),0_8px_24px_-14px_rgba(18,18,18,0.25)]"
+      aria-label={`Invoice ${invoice.invoiceNumber}`}
+      className={`w-full overflow-hidden rounded-xl border border-black/10 border-t-[3px] text-ink ${
+        replaced ? "border-t-zinc-300 bg-zinc-50" : "border-t-brand bg-white shadow-[0_1px_2px_rgba(18,18,18,0.06),0_8px_24px_-14px_rgba(18,18,18,0.25)]"
+      }`}
     >
       <header className="flex items-start justify-between gap-3 px-4 pb-3 pt-3.5">
         <div className="min-w-0">
-          <h3 className="text-[15px] font-bold leading-tight tabular-nums">Invoice {invoice.number}</h3>
-          <p className="mt-0.5 text-[12px] text-ink/55">{dateOf(invoice.createdAt)}</p>
+          <h3 className={`text-[15px] font-bold leading-tight tabular-nums [overflow-wrap:anywhere] ${replaced ? "text-ink/60" : ""}`}>Invoice {invoice.invoiceNumber}</h3>
+          <p className="mt-0.5 text-[12px] tabular-nums text-ink/55">
+            Order {invoice.number} · {dateOf(invoice.createdAt)}
+          </p>
         </div>
         <span className={`mt-0.5 shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${stamp.tone}`}>{stamp.text}</span>
       </header>
 
-      <ul className="mx-4 divide-y divide-black/[0.06] border-y border-dashed border-black/15" aria-label="Items">
-        {invoice.lines.map((l, i) => (
-          <li key={i} className="flex items-start gap-3 py-2.5 text-[13px]">
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold leading-snug [overflow-wrap:anywhere]">{l.title}</p>
-              {l.detail && <p className="mt-0.5 text-[12px] leading-snug text-ink/55 [overflow-wrap:anywhere]">{l.detail}</p>}
-              <p className="mt-0.5 text-[12px] tabular-nums text-ink/55">Qty {l.quantity}</p>
+      {replaced && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls={detailsId}
+          className="mx-4 mb-3 inline-flex items-center gap-1 text-[12.5px] font-semibold text-ink/60 underline-offset-2 hover:text-ink hover:underline"
+        >
+          {open ? "Hide details" : "Show details"}
+          <svg className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+      )}
+
+      {open && (
+        <div id={detailsId} className={replaced ? "opacity-70" : undefined}>
+          <ul className="mx-4 divide-y divide-black/[0.06] border-y border-dashed border-black/15" aria-label="Items">
+            {invoice.lines.map((l, i) => (
+              <li key={i} className="flex items-start gap-3 py-2.5 text-[13px]">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold leading-snug [overflow-wrap:anywhere]">{l.title}</p>
+                  {l.detail && <p className="mt-0.5 text-[12px] leading-snug text-ink/55 [overflow-wrap:anywhere]">{l.detail}</p>}
+                  <p className="mt-0.5 text-[12px] tabular-nums text-ink/55">Qty {l.quantity}</p>
+                </div>
+                <p className="shrink-0 font-semibold tabular-nums">{l.total}</p>
+              </li>
+            ))}
+          </ul>
+
+          <dl className="space-y-1 px-4 pb-3 pt-2.5 text-[13px] tabular-nums">
+            <div className="flex justify-between gap-3">
+              <dt className="text-ink/60">Subtotal</dt>
+              <dd>{invoice.subtotal}</dd>
             </div>
-            <p className="shrink-0 font-semibold tabular-nums">{l.total}</p>
-          </li>
-        ))}
-      </ul>
+            {discount && (
+              <div className="flex justify-between gap-3">
+                <dt className="min-w-0 text-ink/60">
+                  Discount{discountWhy && <span className="text-ink/45"> · {discountWhy}</span>}
+                </dt>
+                <dd className="shrink-0 text-emerald-700">{discount}</dd>
+              </div>
+            )}
+            <div className="flex justify-between gap-3">
+              <dt className="text-ink/60">Shipping</dt>
+              <dd>{invoice.shipping}</dd>
+            </div>
+            <div className="mt-1.5 flex items-baseline justify-between gap-3 border-t border-black/10 pt-2 text-[15px] font-bold">
+              <dt>Total</dt>
+              <dd>{invoice.total}</dd>
+            </div>
+          </dl>
 
-      <dl className="space-y-1 px-4 pb-3 pt-2.5 text-[13px] tabular-nums">
-        <div className="flex justify-between gap-3">
-          <dt className="text-ink/60">Subtotal</dt>
-          <dd>{invoice.subtotal}</dd>
+          <p className="flex items-baseline justify-between gap-3 border-t border-dashed border-black/15 px-4 py-2.5 text-[12.5px]">
+            <span className="text-ink/55">Payment</span>
+            <span className="min-w-0 text-right font-semibold [overflow-wrap:anywhere]">{invoice.paymentMethod}</span>
+          </p>
         </div>
-        {discount && (
-          <div className="flex justify-between gap-3">
-            <dt className="min-w-0 text-ink/60">
-              Discount{discountWhy && <span className="text-ink/45"> · {discountWhy}</span>}
-            </dt>
-            <dd className="shrink-0 text-emerald-700">{discount}</dd>
-          </div>
-        )}
-        <div className="flex justify-between gap-3">
-          <dt className="text-ink/60">Shipping</dt>
-          <dd>{invoice.shipping}</dd>
-        </div>
-        <div className="mt-1.5 flex items-baseline justify-between gap-3 border-t border-black/10 pt-2 text-[15px] font-bold">
-          <dt>Total</dt>
-          <dd>{invoice.total}</dd>
-        </div>
-      </dl>
-
-      <p className="flex items-baseline justify-between gap-3 border-t border-dashed border-black/15 px-4 py-2.5 text-[12.5px]">
-        <span className="text-ink/55">Payment</span>
-        <span className="min-w-0 text-right font-semibold [overflow-wrap:anywhere]">{invoice.paymentMethod}</span>
-      </p>
+      )}
 
       {children}
     </article>
@@ -115,8 +149,16 @@ export function VisitorInvoice({ invoice, onAnswer }: { invoice: InvoiceDTO; onA
     }
   };
 
-  // Only an unpaid order is still waiting for this answer.
-  const askable = !invoice.answer && invoice.status === "PENDING";
+  // Only the newest invoice of an unpaid order is still waiting for this answer.
+  const askable = invoice.latest && !invoice.answer && invoice.status === "PENDING";
+
+  if (!invoice.latest) {
+    return (
+      <InvoiceReceipt invoice={invoice}>
+        <p className="border-t border-black/10 px-4 py-2.5 text-[12.5px] text-ink/55">This invoice was replaced by a newer one below.</p>
+      </InvoiceReceipt>
+    );
+  }
 
   return (
     <InvoiceReceipt invoice={invoice}>

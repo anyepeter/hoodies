@@ -262,7 +262,8 @@ try {
   check(conv?.name === "Ada Lovelace" && conv?.email === "ada+e2e@example.com", "the conversation knows the shopper's name and email");
   const invoiceMsgs = await prisma.chatMessage.findMany({ where: { orderId: dbOrder.id, kind: "INVOICE" } });
   check(
-    invoiceMsgs.length === 1 && invoiceMsgs[0].conversationId === dbOrder.conversationId && invoiceMsgs[0].body.includes(number) && invoiceMsgs[0].body.includes("$116.97"),
+    // The message names the invoice (INV-1001 for #1001), like the vape store.
+    invoiceMsgs.length === 1 && invoiceMsgs[0].conversationId === dbOrder.conversationId && invoiceMsgs[0].body.includes(`INV-${number.slice(1)}`) && invoiceMsgs[0].body.includes("$116.97"),
     `the invoice message is in the shopper's chat (${invoiceMsgs[0]?.body.split("\n")[0]})`,
   );
   check(
@@ -275,6 +276,7 @@ try {
   await page.waitForURL(/\/invoice\//);
   const invoiceText = await page.locator("body").textContent();
   check(invoiceText.includes("Invoice") && invoiceText.includes(number), "invoice has the order number");
+  check((await page.locator('[data-testid="invoice-number"]').textContent()).trim() === `INV-${number.slice(1)}`, `invoice no. is INV-${number.slice(1)}`);
   check(invoiceText.includes("Unpaid") && invoiceText.includes("$116.97"), "invoice says Unpaid, $116.97");
   check(invoiceText.includes("Cryptocurrency discount (10%)−$13.00"), "invoice shows the crypto discount");
   check((await page.locator('[data-payment-logo="crypto"]').count()) === 1 && invoiceText.includes("Cryptocurrency"), "invoice shows the payment method with its logo");

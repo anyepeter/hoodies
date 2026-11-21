@@ -10,6 +10,8 @@ import { ADD_ONS, BUNDLES, HOODIE, SIZES, STYLE_IMAGE, STYLES, money, type AddOn
 
 export const MAX_LINES = 20;
 export const MAX_QTY = 10;
+/** Most hoodies one order may take, so a script can't "buy" the whole stock unpaid (checkout and admin edits). */
+export const MAX_HOODIES_PER_ORDER = 6;
 
 export interface PricedLine {
   key: string;
@@ -138,6 +140,26 @@ export function summarizeLines(lines: { shortTitle?: string; title: string; deta
   const text = lines.map((l) => `${l.quantity > 1 ? `${l.quantity}× ` : ""}${l.shortTitle ?? l.title}${l.detail ? ` (${l.detail})` : ""}`).join(", ");
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
+
+/** The cart key for a pack: "bundle:duo:Akatsuki / M, Shinobi / L". */
+export const bundleKey = (bundle: BundleId, picks: { style: Style; size: Size }[]) => `bundle:${bundle}:${picks.map((p) => `${p.style} / ${p.size}`).join(", ")}`;
+
+/** The cart key a stored order line was made from (order items keep the pack's picks in `detail`). */
+export const itemKey = (item: { kind: string; sku: string; detail: string | null }) => (item.kind === "addon" ? `addon:${item.sku}` : `bundle:${item.sku}:${item.detail ?? ""}`);
+
+/** A pack key's hoodies, in order: [{ style: "Akatsuki", size: "M" }, ...]. Null if it isn't a pack the store sells. */
+export function parsePicks(key: string): { bundle: BundleId; picks: { style: Style; size: Size }[] } | null {
+  const parsed = parseLineKey(key);
+  if (!parsed || parsed.kind !== "bundle" || !parsed.detail) return null;
+  const picks = parsed.detail.split(", ").map((pair) => {
+    const [style, size] = pair.split(" / ") as [Style, Size];
+    return { style, size };
+  });
+  return { bundle: parsed.sku as BundleId, picks };
+}
+
+/** Hoodies in a cart, all styles together. */
+export const hoodieCount = (units: Record<Style, number>) => STYLES.reduce((n, s) => n + units[s], 0);
 
 /** "1 Akatsuki, 2 Shinobi" */
 export function describeUnits(units: Partial<Record<Style, number>>): string {

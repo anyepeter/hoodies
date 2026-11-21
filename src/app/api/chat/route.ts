@@ -13,6 +13,7 @@ import {
   visitorIdFromCookie,
 } from "@/lib/chat/server";
 import { EMAIL_MAX, MESSAGE_MAX, NAME_MAX, previewOf } from "@/lib/chat/shared";
+import { touchVisitor } from "@/lib/chat/visitor-push";
 import { clientIp, fail, ok, rateLimit, readJson, sameOrigin, serverError } from "@/lib/http";
 import { notifyAdmins } from "@/lib/notify";
 import { visitorThread } from "./thread";
@@ -21,8 +22,8 @@ export const dynamic = "force-dynamic";
 
 /*
  * The visitor's side of live chat.
- *   GET  /api/chat          → my conversation + its messages (by cookie), invoice/payment cards attached. Marks the
- *                             replies read.
+ *   GET  /api/chat          → my conversation + its messages (by cookie), invoice/payment cards and files attached.
+ *                             Marks the replies read, and that the shopper is here (no push while they are).
  *   GET  /api/chat?peek=1   → my conversation's unread count only (for the bubble badge). Marks nothing.
  *   POST /api/chat          → start a conversation with a first message; sets the akz_chat cookie.
  * Posting further messages: POST /api/chat/messages. Answering an invoice's question: POST /api/chat/invoice.
@@ -52,7 +53,8 @@ export async function GET(req: NextRequest) {
     }
     if (req.nextUrl.searchParams.get("peek") === "1") return ok({ conversation: visitorConversationDTO(conv), messages: [] });
 
-    return ok(await visitorThread(conv));
+    const [thread] = await Promise.all([visitorThread(conv), touchVisitor(conv.id)]);
+    return ok(thread);
   } catch (err) {
     return serverError("chat:get", err);
   }
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
     // Already chatting (e.g. a second tab): carry on in the same conversation instead of starting another.
     const existing = await myConversation();
     if (existing) {
-      const m = await addVisitorMessage(existing, message);
+      const [m] = await Promise.all([addVisitorMessage(existing, message), touchVisitor(existing.id)]);
       return ok({ conversation: visitorConversationDTO(existing), messages: [m] });
     }
 
@@ -89,6 +91,7 @@ export async function POST(req: NextRequest) {
         pagePath: pagePath && /^\/(?![\/\\])[^\s\\]*$/.test(pagePath) ? pagePath : null,
         userAgent: req.headers.get("user-agent")?.slice(0, 500) ?? null,
         unreadForAdmin: 1,
+        visitorLastSeenAt: now,
         lastMessage: previewOf(message),
         lastMessageAt: now,
         messages: { create: { sender: "VISITOR", body: message, createdAt: now } },

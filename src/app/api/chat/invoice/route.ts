@@ -3,6 +3,7 @@ import { z } from "zod";
 import { InvoiceAnswerError, answerInvoice } from "@/lib/chat/order-chat";
 import { myConversation } from "@/lib/chat/server";
 import { CONVERSATION_ID } from "@/lib/chat/shared";
+import { touchVisitor } from "@/lib/chat/visitor-push";
 import { clientIp, fail, ok, rateLimit, readJson, sameOrigin, serverError } from "@/lib/http";
 import { visitorThread } from "../thread";
 
@@ -40,7 +41,8 @@ export async function POST(req: NextRequest) {
       throw err;
     }
     // Answering reopens a closed conversation (answerInvoice sets it OPEN).
-    return ok(await visitorThread({ ...conv, status: "OPEN" }));
+    const [thread] = await Promise.all([visitorThread({ ...conv, status: "OPEN" }), touchVisitor(conv.id)]);
+    return ok(thread);
   } catch (err) {
     return serverError("chat:invoice", err);
   }

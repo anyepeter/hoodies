@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PaymentLogo } from "@/components/checkout/PaymentLogos";
 import { myConversation } from "@/lib/chat/server";
-import { INVOICE_COPY } from "@/lib/chat/shared";
+import { INVOICE_COPY, invoiceNo } from "@/lib/chat/shared";
 import { discountPercentOf } from "@/lib/orders/payment-rails";
 import { getOrderByToken } from "@/lib/orders/queries";
 import { CUSTOMER_STATUS_LABEL, orderNumber } from "@/lib/orders/status";
@@ -29,7 +29,11 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 /** What the chat box says, from where the order is in the chat (invoice sent → confirmed → details sent). */
-function chatCopy(o: { invoiceAnswer: string | null; paymentDetailsSentAt: Date | null; paymentMethod: string }, total: string): { title: string; text: string } {
+function chatCopy(
+  o: { invoiceAnswer: string | null; paymentDetailsSentAt: Date | null; paymentMethod: string; invoiceVersion: number },
+  total: string,
+  invoice: string,
+): { title: string; text: string } {
   if (o.paymentDetailsSentAt) {
     return { title: "Your payment details are in the chat", text: `Send ${total} with ${o.paymentMethod} as the message says. We ship as soon as it arrives.` };
   }
@@ -38,6 +42,9 @@ function chatCopy(o: { invoiceAnswer: string | null; paymentDetailsSentAt: Date 
   }
   if (o.invoiceAnswer === "wrong") {
     return { title: "Tell us what needs changing", text: "Write to us in the chat and we'll send you an updated invoice." };
+  }
+  if (o.invoiceVersion > 1) {
+    return { title: `Your updated invoice ${invoice} is in the chat.`, text: `Check it and tap “${INVOICE_COPY.yesButton}” — we'll send your payment details right there.` };
   }
   return { title: "Your invoice is in the chat.", text: `Check it and tap “${INVOICE_COPY.yesButton}” — we'll send your payment details right there.` };
 }
@@ -48,6 +55,7 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
   if (!order) notFound();
 
   const number = orderNumber(order.number);
+  const invoice = invoiceNo(order.number, order.invoiceVersion);
   const total = Number(order.total);
   const subtotal = Number(order.subtotal);
   const discount = Number(order.paymentDiscount);
@@ -58,7 +66,7 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
   // The invoice is in the chat of the browser that placed the order. Only that browser can open it.
   const mine = order.conversationId ? await myConversation().catch(() => null) : null;
   const chatHere = Boolean(order.conversationId && mine?.id === order.conversationId);
-  const chat = chatCopy(order, money(total));
+  const chat = chatCopy(order, money(total), invoice);
 
   return (
     <section className="mx-auto max-w-[960px] px-4 pb-16 pt-8 md:px-8 md:pt-12">
@@ -121,7 +129,12 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
 
       <div className="mt-8 grid items-start gap-6 md:grid-cols-[1fr_300px]">
         <div className="rounded-3xl border border-black/10 p-4 md:p-6">
-          <h2 className="text-[18px] font-bold">Your items</h2>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="text-[18px] font-bold">Your items</h2>
+            <p className="text-[13px] text-ink/55" data-testid="invoice-number">
+              Invoice <b className="font-semibold text-ink">{invoice}</b>
+            </p>
+          </div>
           <ul className="mt-3 divide-y divide-black/5">
             {order.items.map((it) => (
               <li key={it.id} className="flex gap-3 py-3">

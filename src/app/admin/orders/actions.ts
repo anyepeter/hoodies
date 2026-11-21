@@ -55,7 +55,7 @@ export async function changeOrderStatus(input: { id: string; to: OrderStatus; re
   const reference = parsed.data.reference || null;
 
   try {
-    const order = await prisma.order.findUnique({ where: { id }, select: { status: true, stockTaken: true } });
+    const order = await prisma.order.findUnique({ where: { id }, select: { status: true } });
     if (!order) return { ok: false, error: "That order doesn't exist any more." };
     const from = order.status;
     if (from === to) return { ok: true }; // a double click, already done
@@ -91,7 +91,9 @@ export async function changeOrderStatus(input: { id: string; to: OrderStatus; re
         // Claim the restore first: only the call that flips the flag puts stock back.
         const claim = await tx.order.updateMany({ where: { id, stockRestored: false }, data: { stockRestored: true } });
         if (claim.count === 0) return false;
-        const taken = parseStockTaken(order.stockTaken);
+        // Read what it holds now, under the row lock the claim took: an edit may have changed it since the page loaded.
+        const held = await tx.order.findUnique({ where: { id }, select: { stockTaken: true } });
+        const taken = parseStockTaken(held?.stockTaken);
         for (const style of STYLES) {
           const n = taken[style];
           if (n > 0) await tx.$executeRaw`UPDATE "StyleStock" SET "stock" = "stock" + ${n}, "updatedAt" = NOW() WHERE "style" = ${style}`;

@@ -94,7 +94,8 @@ async function scene(label) {
   });
   await db.conversation.update({ where: { id: conv.id }, data: { lastMessage: `New order ${number} · ${total}`, lastMessageAt: now, unreadForAdmin: { increment: 1 }, status: "OPEN" } });
   await db.order.update({ where: { id: order.id }, data: { conversationId: conv.id } });
-  return { token, convId: conv.id, orderId: order.id, orderToken: order.token, number, total, messageId: msg.id };
+  // The card's heading is the invoice number (INV-1001; INV-1001-2 for an updated one), like the vape store.
+  return { token, convId: conv.id, orderId: order.id, orderToken: order.token, number, invoice: `INV-${1000 + order.number}`, total, messageId: msg.id };
 }
 
 /** Same rows as sendPaymentDetails() in src/lib/chat/order-chat.ts. */
@@ -141,10 +142,11 @@ try {
   await panel.waitFor({ timeout: 10000 });
   check(true, 'visitor: "akz:open-chat" opens the panel');
   const vlog = panel.getByRole("log", { name: "Messages" });
-  const card = vlog.getByRole("article", { name: `Invoice ${A.number}` });
+  const card = vlog.getByRole("article", { name: `Invoice ${A.invoice}`, exact: true });
   await card.waitFor({ timeout: 20000 });
-  check(true, `visitor: the invoice card shows (Invoice ${A.number})`);
-  check(await card.getByRole("heading", { name: `Invoice ${A.number}` }).isVisible(), "visitor: card heading reads Invoice #…");
+  check(true, `visitor: the invoice card shows (Invoice ${A.invoice})`);
+  check(await card.getByRole("heading", { name: `Invoice ${A.invoice}`, exact: true }).isVisible(), "visitor: card heading reads Invoice INV-…");
+  check(await card.getByText(`Order ${A.number} ·`).isVisible(), "visitor: the order number shows under it");
   check(await card.getByText("Duo bundle").isVisible(), "visitor: line title shows");
   check(await card.getByText("Akatsuki / M, Shinobi / L").isVisible(), "visitor: line detail shows");
   check(await card.getByText("Qty 2").isVisible(), "visitor: line quantity shows");
@@ -186,7 +188,7 @@ try {
   watch(desk, "visitor 1440");
   await desk.goto(`${base}/`, { waitUntil: "networkidle" });
   await desk.evaluate(() => window.dispatchEvent(new CustomEvent("akz:open-chat")));
-  await desk.getByRole("dialog", { name: "Chat with AkatsukiZipUp" }).getByRole("article", { name: `Invoice ${A.number}` }).waitFor({ timeout: 20000 });
+  await desk.getByRole("dialog", { name: "Chat with AkatsukiZipUp" }).getByRole("article", { name: `Invoice ${A.invoice}`, exact: true }).waitFor({ timeout: 20000 });
   await desk.waitForTimeout(300);
   const dview = await invoiceView(desk);
   check(dview.buttons, "visitor 1440px: opened for an order, the answer buttons are in view");
@@ -269,7 +271,7 @@ try {
 
   await admin.goto(`${base}/admin/chat?c=${A.convId}`, { waitUntil: "networkidle" });
   const alog = admin.getByRole("log", { name: "Messages" });
-  const acard = alog.getByRole("article", { name: `Invoice ${A.number}` });
+  const acard = alog.getByRole("article", { name: `Invoice ${A.invoice}`, exact: true });
   await acard.waitFor({ timeout: 20000 });
   check(true, "admin: the invoice shows as a receipt card");
   check(await acard.getByText("Duo bundle").isVisible() && (await acard.getByText(A.total, { exact: true }).isVisible()), "admin: card has the lines and the total");
@@ -289,14 +291,14 @@ try {
   const rowBText = (await rowB.textContent()) ?? "";
   check(rowBText.includes("Something's wrong with my invoice") && !rowBText.includes("You:"), "admin inbox: the other conversation's preview is the shopper's answer, not \"You: …\"");
   await rowB.click();
-  const bcard = alog.getByRole("article", { name: `Invoice ${B.number}` });
+  const bcard = alog.getByRole("article", { name: `Invoice ${B.invoice}`, exact: true });
   await bcard.waitFor({ timeout: 20000 });
   check(await bcard.getByText("Says something's wrong").isVisible(), "admin: answer status reads Says something's wrong");
 
   // A fresh, unanswered order: "Waiting for the shopper", and the preview is "New order #… · $…" (no "You:").
   const C = await scene("c");
   await admin.goto(`${base}/admin/chat?c=${C.convId}`, { waitUntil: "networkidle" });
-  const ccard = alog.getByRole("article", { name: `Invoice ${C.number}` });
+  const ccard = alog.getByRole("article", { name: `Invoice ${C.invoice}`, exact: true });
   await ccard.waitFor({ timeout: 20000 });
   check(await ccard.getByText("Waiting for the shopper").isVisible(), "admin: an unanswered invoice reads Waiting for the shopper");
   const rowC = admin.getByRole("button").filter({ hasText: `E2E Invoice ${tag} c` });

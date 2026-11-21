@@ -115,3 +115,10 @@ network failure ("We couldn't reach the server. Check your connection and try ag
   "Order confirmed" page opens the chat (`akz:open-chat`); admin sends payment details from the order page (PAYMENT
   message). Home style cards link to the hoodie page with `?style=`. e2e: order-to-chat 24, checkout 127,
   invoice-chat 59, chat 70, insights 57, home-and-dates 17, flow 12.
+- [x] Chat like the vape store — 21 Nov 2026. Pictures + PDFs both ways (made small in the browser, stored in
+  Postgres ChatFile, served only to that chat's shopper / the admin, type-checked by magic bytes, sandbox CSP);
+  shoppers' "Don't miss your payment details" notification card (public/sw.js, ChatPushSubscription; pushes only
+  when they're away, max 1/min per chat; `?chat=open` opens the chat); admin order editor for PENDING orders
+  (server recomputes totals + moves stock) and "Send updated invoice" (INV-1001-2, old card REPLACED). e2e:
+  order-to-chat 24, order-edit 71, checkout 128, invoice-chat 60, chat-files 62, chat-notify 62, chat 70,
+  insights 57, home-and-dates 17, flow 12 — 563 checks.
