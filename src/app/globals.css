@@ -1,26 +1,108 @@
 @import "tailwindcss";
 
+/* The original theme's tokens (Shrine PRO): accent red #A70317, text #121212, soft grey #F3F3F3, Poppins. */
+@theme {
+  --color-brand: #a70317;
+  --color-brand-dark: #85020f;
+  --color-ink: #121212;
+  --color-soft: #f3f3f3;
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  --font-script: var(--font-script-face), cursive;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #ffffff;
+  color: rgb(18 18 18 / 0.9);
+  font-family: var(--font-sans);
+  font-size: 15px;
+}
+
+@layer components {
+  .btn-brand {
+    @apply inline-flex items-center justify-center rounded-md bg-brand px-6 py-3 font-bold text-white transition duration-200 hover:bg-brand-dark active:scale-[0.98];
+  }
+  .select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23121212'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 8px;
+  }
+  .check {
+    @apply grid h-[18px] w-[18px] shrink-0 cursor-pointer appearance-none place-content-center rounded-[3px] border-2 border-brand bg-white;
+  }
+  .check:checked::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    background: var(--color-brand);
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  }
+  .ribbon {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 100%, 0 100%, 8px 50%);
+  }
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Endless strips */
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  animation: marquee linear infinite;
+}
+
+/* Fade blocks up as they scroll in */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.reveal[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+dialog.modal[open] {
+  animation: pop 0.25s ease-out;
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation-duration: 0s !important;
+    animation: none;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }
