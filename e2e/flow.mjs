@@ -31,7 +31,7 @@ await card.getByRole("button", { name: "Shinobi" }).nth(1).click();
 check((await page.locator('[inert] [aria-label="Size M for hoodie 1"]').count()) === 2, "the two closed packs are inert (skipped by keyboard and screen readers)");
 check(!(await page.getByRole("checkbox").first().isChecked()), "extras start unticked");
 await page.getByText("Mystery Box", { exact: true }).click();
-check((await buy.textContent()).includes("€118,26"), "button shows the total with the extra (€118,26)");
+check((await buy.textContent()).includes("$118.26"), "button shows the total with the extra ($118.26)");
 
 await buy.click();
 await page.waitForTimeout(1300);
@@ -39,7 +39,7 @@ const drawer = page.getByRole("dialog", { name: "Your cart" });
 check(await drawer.getByText("Akatsuki Mask Hoodie · Duo Pack").isVisible(), "cart opens with the duo pack");
 check(await drawer.getByText("Akatsuki / M, Shinobi / L").isVisible(), "cart line shows both styles and sizes");
 check(await drawer.getByText("Mystery Box").first().isVisible(), "cart has the mystery box");
-check((await drawer.textContent()).includes("€118,26"), "cart total is €118,26");
+check((await drawer.textContent()).includes("$118.26"), "cart total is $118.26");
 await page.screenshot({ path: `${out}/flow-cart.png` });
 
 // 3. Close, scroll past the button: the sticky bar appears.

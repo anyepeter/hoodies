@@ -21,10 +21,10 @@ const productJsonLd = {
   brand: { "@type": "Brand", name: "AkatsukiZipUp" },
   offers: {
     "@type": "Offer",
-    priceCurrency: "EUR",
+    priceCurrency: "USD",
     price: HOODIE.price.toFixed(2),
     availability: "https://schema.org/InStock",
-    shippingDetails: { "@type": "OfferShippingDetails", shippingRate: { "@type": "MonetaryAmount", value: "0", currency: "EUR" } },
+    shippingDetails: { "@type": "OfferShippingDetails", shippingRate: { "@type": "MonetaryAmount", value: "0", currency: "USD" } },
   },
 };
 
