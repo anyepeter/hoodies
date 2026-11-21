@@ -13,6 +13,9 @@ export const STYLES: Style[] = ["Akatsuki", "Shinobi"];
 export const SIZES = ["S", "M", "L", "XL", "2XL"] as const;
 export type Size = (typeof SIZES)[number];
 
+/** Pieces left of each style, shown as "Only 20 left". Change the numbers here. */
+export const STOCK: Record<Style, number> = { Akatsuki: 20, Shinobi: 35 };
+
 export const STYLE_IMAGE: Record<Style, string> = {
   Akatsuki: "/store/akatsuki-front.webp",
   Shinobi: "/store/shinobi-front.webp",

@@ -2,7 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Stars } from "@/components/icons";
 import { AutoplayVideo } from "@/components/sections/AutoplayVideo";
-import { HOODIE, JOIN, money } from "@/lib/store";
+import { StyleCard } from "@/components/sections/StyleCard";
+import { HOODIE, JOIN, money, type Style } from "@/lib/store";
 
 /**
  * The original home page is one product tile. This opens on the store's own video instead: full screen on a
@@ -67,9 +68,9 @@ export function Hero() {
   );
 }
 
-/** Akatsuki and Shinobi side by side; hover (or tap) shows the second photo. */
+/** Akatsuki and Shinobi side by side, each with pieces left and its own Add to cart. */
 export function StylesSpotlight() {
-  const styles = [
+  const styles: { name: Style; text: string; front: string; alt: string }[] = [
     { name: "Akatsuki", text: "Black, with the red clouds.", front: "/store/akatsuki-front.webp", alt: "/store/akatsuki-2.webp" },
     { name: "Shinobi", text: "Green vest look with navy sleeves.", front: "/store/shinobi-front.webp", alt: "/store/shinobi-back.webp" },
   ];
@@ -86,23 +87,7 @@ export function StylesSpotlight() {
       </div>
       <div className="mt-8 grid gap-4 md:grid-cols-2 md:gap-6">
         {styles.map((s, i) => (
-          <Link key={s.name} href={`/products/${HOODIE.handle}`} className="group block">
-            <div className="relative aspect-square overflow-hidden rounded-3xl bg-soft">
-              <Image src={s.front} alt={`${s.name} Mask Hoodie`} fill sizes="(min-width: 768px) 50vw, 100vw" priority={i === 0} className="object-cover transition duration-700 group-hover:scale-105 group-hover:opacity-0" />
-              <Image src={s.alt} alt="" fill sizes="(min-width: 768px) 50vw, 100vw" className="scale-105 object-cover opacity-0 transition duration-700 group-hover:scale-100 group-hover:opacity-100" />
-              <span className="absolute left-4 top-4 rounded-full bg-brand px-3 py-1 text-[12px] font-bold text-white">Save 28%</span>
-            </div>
-            <div className="mt-4 flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-[20px] font-bold tracking-tight">{s.name}</h3>
-                <p className="text-[14px] text-ink/60">{s.text}</p>
-              </div>
-              <p className="text-right text-[15px]">
-                <b className="text-brand">{money(HOODIE.price)}</b>
-                <s className="block text-[12px] text-ink/40">{money(HOODIE.compareAt)}</s>
-              </p>
-            </div>
-          </Link>
+          <StyleCard key={s.name} style={s.name} text={s.text} front={s.front} back={s.alt} priority={i === 0} />
         ))}
       </div>
     </section>

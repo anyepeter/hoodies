@@ -75,6 +75,7 @@ Checks (run against a running server):
 
 ```bash
 node e2e/flow.mjs http://localhost:3200      # walks the buying flow: 12 checks
+node e2e/home-and-dates.mjs http://localhost:3200   # quick add on the style cards, pieces left, delivery dates on 22 Nov
 node e2e/screens.mjs http://localhost:3200 e2e/out   # phone + desktop screenshots, sideways-scroll check
 node e2e/overflow.mjs                         # lists anything wider than a phone screen
 ```
@@ -84,6 +85,8 @@ node e2e/overflow.mjs                         # lists anything wider than a phon
 | What | Where |
 | --- | --- |
 | Product, bundles, add-ons, reviews, FAQs, size chart, all wording | `src/lib/store.ts` |
+| Pieces left per style ("Only 20 left": Akatsuki 20, Shinobi 35) | `STOCK` in `src/lib/store.ts` |
+| Delivery dates (ordered today, ships in 1–2 days, delivered in 5–7, from the visitor's own date) | `src/components/product/DeliveryTimeline.tsx` |
 | Policy pages (shipping, refund, terms, privacy, contact) | `src/lib/policies.ts` |
 | Photos and the video (downloaded from the store's CDN) | `public/store/` |
 | Home page | `src/app/page.tsx`, `src/components/sections/Hero.tsx` |

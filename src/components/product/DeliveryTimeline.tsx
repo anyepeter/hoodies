@@ -5,12 +5,28 @@ import { CartAddIcon, GiftIcon, TruckIcon } from "@/components/icons";
 
 const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const plus = (d: Date, days: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + days);
-const noSubscribe = () => () => {};
+/** Re-render just after local midnight, so a page left open overnight moves on to the new day. */
+function subscribeMidnight(cb: () => void) {
+  let timer: ReturnType<typeof setTimeout>;
+  const arm = () => {
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+    timer = setTimeout(() => {
+      cb();
+      arm();
+    }, next.getTime() - now.getTime());
+  };
+  arm();
+  return () => clearTimeout(timer);
+}
 
-/** Ordered today → ready to ship in 1–2 days → delivered in 5–7 days, worked out in the visitor's browser. */
+/**
+ * Ordered today → ready to ship in 1–2 days → delivered in 5–7 days, from the visitor's own date: open it on
+ * 22 Nov and it says "22 Nov · 23 Nov - 24 Nov · 27 Nov - 29 Nov".
+ */
 export function DeliveryTimeline() {
   // The server can't know the visitor's date, so it renders blanks and the browser fills them in.
-  const day = useSyncExternalStore(noSubscribe, () => new Date().toDateString(), () => null);
+  const day = useSyncExternalStore(subscribeMidnight, () => new Date().toDateString(), () => null);
   const today = day ? new Date(day) : null;
 
   const steps = [

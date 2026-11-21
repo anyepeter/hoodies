@@ -16,6 +16,7 @@ import {
   HOODIE,
   RECENT_BUYERS,
   SIZES,
+  STOCK,
   STYLE_IMAGE,
   STYLES,
   money,
@@ -198,6 +199,7 @@ export function ProductMain() {
                               <legend className="mb-2 text-[12px] font-semibold text-ink/60">
                                 {b.qty > 1 ? `Hoodie ${i + 1}` : "Your hoodie"} · <span className="text-ink">{c.style}</span>
                                 {c.size && <span className="text-ink">, {c.size}</span>}
+                                <span className="ml-1.5 font-bold text-brand">· Only {STOCK[c.style]} left</span>
                               </legend>
                               <div className="flex gap-2">
                                 {STYLES.map((s) => (
@@ -212,6 +214,7 @@ export function ProductMain() {
                                   >
                                     <Image src={STYLE_IMAGE[s]} alt="" width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
                                     {s}
+                                    <span className={`text-[11px] font-semibold ${c.style === s ? "text-white/70" : "text-brand"}`}>{STOCK[s]} left</span>
                                   </button>
                                 ))}
                               </div>
