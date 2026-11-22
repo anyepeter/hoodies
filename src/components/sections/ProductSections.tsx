@@ -7,7 +7,7 @@ import { Reveal } from "@/components/Reveal";
 import { AccordionItem } from "@/components/sections/Accordion";
 import { AutoplayVideo } from "@/components/sections/AutoplayVideo";
 import { Wave } from "@/components/Wave";
-import { ALL_REVIEWS, FAQS, FEATURES, HOODIE, JOIN, PRODUCT_QUESTIONS, SALE_TICKER, TICKER_REVIEWS, money } from "@/lib/store";
+import { ALL_REVIEWS, FAQS, FEATURES, HOODIE, JOIN, PRODUCT_QUESTIONS, SALE_TICKER, SIZE_GUIDE, TICKER_REVIEWS, money } from "@/lib/store";
 
 /** Zig-zag rows: photo on one side, the selling point on the other, alternating. */
 export function FeatureRows() {
@@ -102,10 +102,47 @@ export function SaleTicker() {
   );
 }
 
+/** The store's size-guide picture on the home page, with one line on how to use it. */
+export function SizeGuide() {
+  return (
+    <section id="size-guide" className="mx-auto max-w-[1400px] scroll-mt-24 px-4 py-14 md:px-12 md:py-20" aria-labelledby="size-guide-title">
+      <div className="grid items-center gap-8 md:grid-cols-12 md:gap-14">
+        <Reveal className="md:col-span-5">
+          <p className="text-[12px] font-bold uppercase tracking-[0.2em] text-brand">Size guide</p>
+          <h2 id="size-guide-title" className="mt-2 text-balance text-[30px] font-bold leading-[1.05] tracking-tight md:text-[48px]">
+            Find your size.
+          </h2>
+          <p className="mt-4 max-w-md text-pretty text-[15px] leading-relaxed text-ink/70 md:text-[17px]">
+            Compare these measurements with a hoodie you already own for the closest fit. S to 2XL, unisex.
+          </p>
+          <Link href={`/products/${HOODIE.handle}`} className="btn-brand mt-7 hidden h-13 rounded-2xl px-8 md:inline-flex">
+            Shop the hoodie →
+          </Link>
+        </Reveal>
+        <Reveal delay={120} className="md:col-span-7">
+          <Image
+            src={SIZE_GUIDE.src}
+            alt={SIZE_GUIDE.alt}
+            width={1254}
+            height={1254}
+            sizes="(min-width: 768px) 55vw, 100vw"
+            className="h-auto w-full rounded-3xl shadow-[0_30px_60px_-30px_rgba(18,18,18,0.6)]"
+          />
+          <Link href={`/products/${HOODIE.handle}`} className="btn-brand mt-6 h-13 w-full rounded-2xl md:hidden">
+            Shop the hoodie →
+          </Link>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
 /**
  * Every review on one wall (masonry columns) instead of a 3-slide carousel where two of three are hidden.
+ * `photosOnly` keeps just the reviews that come with a customer photo (the home page's short version).
  */
-export function ReviewWall() {
+export function ReviewWall({ photosOnly = false }: { photosOnly?: boolean }) {
+  const reviews = photosOnly ? ALL_REVIEWS.filter((r) => r.image) : ALL_REVIEWS;
   return (
     <section id="reviews" className="mx-auto max-w-[1400px] scroll-mt-24 px-4 py-16 md:px-12 md:py-24">
       <Reveal className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-end">
@@ -122,7 +159,7 @@ export function ReviewWall() {
         </p>
       </Reveal>
       <div className="mt-10 columns-1 gap-4 sm:columns-2 lg:columns-3">
-        {ALL_REVIEWS.map((r, i) => (
+        {reviews.map((r, i) => (
           <Reveal key={r.name} delay={(i % 3) * 90} className="mb-4 break-inside-avoid">
             <figure className="overflow-hidden rounded-3xl bg-soft">
               {r.image && (

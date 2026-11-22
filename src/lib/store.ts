@@ -141,6 +141,14 @@ export const SIZE_CHART: { size: Size; chest: number; shoulder: number; sleeve: 
   { size: "2XL", chest: 55.12, shoulder: 28.35, sleeve: 28.35, body: 32.28 },
 ];
 
+/** The store's size-guide picture (the same numbers as SIZE_CHART), with those numbers as its description. */
+export const SIZE_GUIDE = {
+  src: "/store/size-guide.png",
+  alt: `Size guide, garment measurements in inches. ${SIZE_CHART.map(
+    (r) => `${r.size}: chest ${r.chest}, shoulder ${r.shoulder}, sleeve ${r.sleeve}, body length ${r.body}`,
+  ).join(". ")}.`,
+};
+
 /** Every review the store shows, in one list, for the review wall. */
 export const ALL_REVIEWS = [
   ...TESTIMONIALS.map((t) => ({ title: t.title, text: t.text, name: t.name, avatar: t.avatar, image: t.image })),

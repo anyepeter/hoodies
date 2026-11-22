@@ -80,11 +80,15 @@ await page.reload({ waitUntil: "load" });
 await ticking();
 check(secs(await timer.textContent()) > 14 * 3600 - 10, `coming back the next day shows a fresh 14 hours (${await timer.textContent()})`);
 
-// 6. Sizing chart: a real table with a cm switch.
+// 6. Sizing chart: opens the store's size-guide picture, and closes again.
 await page.getByRole("button", { name: "Sizing chart", exact: true }).click();
-await page.getByRole("button", { name: "Centimetres" }).click();
-check(await page.getByRole("cell", { name: "112", exact: true }).isVisible(), "size guide converts S chest to 112 cm");
+const guide = page.getByRole("dialog", { name: "Size guide" });
+// The picture loads lazily, once the pop-up shows it.
+await page.waitForFunction(() => { const i = document.querySelector('dialog[open] img[src*="size-guide"]'); return i?.complete && i.naturalWidth > 0; }, null, { timeout: 10000 }).catch(() => {});
+check(await guide.locator('img[src*="size-guide"]').evaluate((img) => img.complete && img.naturalWidth > 0 && img.getBoundingClientRect().width > 300), "Sizing chart opens the store's size-guide picture");
 await page.screenshot({ path: `${out}/flow-size-guide.png` });
+await guide.getByRole("button", { name: "Close size guide" }).click();
+check(!(await guide.isVisible()), "the size guide closes");
 
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(" | ")}` : ""}`);
 await browser.close();
