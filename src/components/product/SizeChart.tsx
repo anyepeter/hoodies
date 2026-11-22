@@ -30,9 +30,9 @@ export function SizeChart({ highlight }: { highlight?: string }) {
 
   return (
     <>
-      <button type="button" onClick={() => dialog.current?.showModal()} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink/70 underline-offset-4 transition hover:text-ink hover:underline">
-        <RulerIcon className="h-4 w-4" />
-        Size guide
+      <button type="button" onClick={() => dialog.current?.showModal()} className="inline-flex items-center gap-2 text-[15px] font-semibold text-ink transition hover:text-brand">
+        <RulerIcon className="h-5 w-5" />
+        <span className="underline underline-offset-4">Sizing chart</span>
       </button>
       <dialog ref={dialog} className="sheet m-auto w-[min(94vw,560px)] rounded-3xl bg-white p-0 shadow-2xl backdrop:bg-ink/60 backdrop:backdrop-blur-sm">
         <div className="p-5 md:p-8">

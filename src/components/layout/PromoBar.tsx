@@ -5,19 +5,38 @@ import { CloseIcon } from "@/components/icons";
 import { Marquee } from "@/components/Marquee";
 import { TOP_TICKER } from "@/lib/store";
 
-/** Seconds left until local midnight, ticking once a second. The server renders "--:--:--". */
-const secondsToMidnight = () => {
-  const now = new Date();
-  const end = new Date(now);
-  end.setHours(24, 0, 0, 0);
-  return Math.floor((end.getTime() - now.getTime()) / 1000);
+/* The sale countdown runs in 14-hour rounds. A visitor's first visit starts a round at 14:00:00; coming back
+   (or reloading) carries on from where it was; when a round reaches zero, the next one starts at 14:00:00.
+   The end time is kept in the browser, so every visitor has their own round. The server renders "--:--:--". */
+const ROUND_MS = 14 * 60 * 60 * 1000;
+const KEY = "akz.sale-ends-at";
+let endsAt = 0; // in memory too, for browsers that block storage
+
+function roundEnd(now: number): number {
+  if (!endsAt) {
+    try {
+      endsAt = Number(localStorage.getItem(KEY)) || 0;
+    } catch {}
+  }
+  // Ended (or a clock that moved back past the round's start): a fresh 14 hours from now.
+  if (endsAt <= now || endsAt > now + ROUND_MS) {
+    endsAt = now + ROUND_MS;
+    try {
+      localStorage.setItem(KEY, String(endsAt));
+    } catch {}
+  }
+  return endsAt;
+}
+const secondsLeft = () => {
+  const now = Date.now();
+  return Math.ceil((roundEnd(now) - now) / 1000);
 };
 // React may read the snapshot several times per render, so it's cached and only the interval moves it.
 let snapshot: number | null = null;
-const readClock = () => snapshot ?? (snapshot = secondsToMidnight());
+const readClock = () => snapshot ?? (snapshot = secondsLeft());
 function subscribeClock(cb: () => void) {
   const id = setInterval(() => {
-    snapshot = secondsToMidnight();
+    snapshot = secondsLeft();
     cb();
   }, 1000);
   return () => clearInterval(id);

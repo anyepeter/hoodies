@@ -102,7 +102,7 @@ export const JOIN = {
 };
 
 export const TOP_TICKER = ["FREE WORLDWIDE SHIPPING", "LAST UNITS IN STOCK", "FLASH SALE AT 27%"];
-export const SALE_TICKER = ["FREE WORLDWIDE SHIPPING", "27% OFF ENTIRE STORE", "SALE ENDS MIDNIGHT"];
+export const SALE_TICKER = ["FREE WORLDWIDE SHIPPING", "27% OFF ENTIRE STORE", "FLASH SALE ENDS SOON"];
 
 export const FAQS = [
   { q: "Is this hoodie unisex?", a: "Yes! The AkatsukiZipUp Mask Hoodie is made for anyone who loves anime streetwear. Check our size guide to find your preferred fit." },

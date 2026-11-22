@@ -118,11 +118,13 @@ try {
   // 1. Duo pack (Akatsuki M + Shinobi L) + Mystery Box, as in flow.mjs.
   await page.goto(`${base}/products/akatsukizipup-mask-hoodie`, { waitUntil: "networkidle" });
   const card = page.locator('[role="radio"][aria-checked="true"]').locator("..");
-  await card.getByRole("button", { name: "Size M for hoodie 1" }).click();
-  await card.getByRole("button", { name: "Size L for hoodie 2" }).click();
-  await card.getByRole("button", { name: "Shinobi" }).nth(1).click();
-  await page.getByText("Mystery Box", { exact: true }).click();
-  await page.getByRole("button", { name: /^Add to cart · / }).click();
+  await card.getByLabel("Size for hoodie 1").selectOption("M");
+  await card.getByLabel("Style for hoodie 2").selectOption("Shinobi");
+  await card.getByLabel("Size for hoodie 2").selectOption("L");
+  // The extras start ticked: keep the mystery box, untick the other two.
+  await card.getByText("Add Shipping Protection").click();
+  await card.getByText("Add Priority Shipping").click();
+  await page.getByRole("button", { name: "Add to cart", exact: true }).first().click();
   await page.waitForTimeout(1300);
   await page
     .getByRole("dialog", { name: "Your cart" })
@@ -474,20 +476,9 @@ try {
     await page.goto(`${base}/products/akatsukizipup-mask-hoodie?style=Akatsuki`, { waitUntil: "networkidle" });
     await page.waitForTimeout(500);
     const open = page.locator('[role="radio"][aria-checked="true"]').locator("..");
-    check(
-      await open
-        .getByRole("button", { name: /^Akatsuki/ })
-        .first()
-        .isDisabled(),
-      "hoodie page: the Akatsuki swatch is disabled",
-    );
-    check(
-      (await open
-        .getByRole("button", { name: /^Shinobi/ })
-        .first()
-        .getAttribute("aria-pressed")) === "true",
-      "hoodie page: Shinobi is picked, even with ?style=Akatsuki",
-    );
+    const akOption = open.locator('select[aria-label="Style for hoodie 1"] option[value="Akatsuki"]');
+    check((await akOption.evaluate((o) => o.disabled)) && (await akOption.textContent()) === "Akatsuki (sold out)", "hoodie page: Akatsuki can't be picked and reads (sold out)");
+    check((await open.getByLabel("Style for hoodie 1").inputValue()) === "Shinobi", "hoodie page: Shinobi is picked, even with ?style=Akatsuki");
     await page.screenshot({ path: `${out}/sold-out.png` });
   } finally {
     await setStock("Akatsuki", before.Akatsuki);
@@ -526,8 +517,10 @@ try {
   await page.goto(`${base}/products/akatsukizipup-mask-hoodie`, { waitUntil: "networkidle" });
   await page.locator('[role="radio"]').filter({ hasText: "Solo" }).first().click();
   await page.waitForTimeout(400);
-  await page.locator('[role="radio"][aria-checked="true"]').locator("..").getByRole("button", { name: "Size M for hoodie 1" }).click();
-  await page.getByRole("button", { name: /^Add to cart · / }).click();
+  const solo = page.locator('[role="radio"][aria-checked="true"]').locator("..");
+  await solo.getByLabel("Size for hoodie 1").selectOption("M");
+  for (const extra of ["Add Mystery Box", "Add Shipping Protection", "Add Priority Shipping"]) await solo.getByText(extra).click();
+  await page.getByRole("button", { name: "Add to cart", exact: true }).first().click();
   await page.waitForTimeout(1300);
   await page.goto(`${base}/checkout`, { waitUntil: "networkidle" });
   const newRail = page.locator('label[data-rail="other"]').filter({ hasText: NAME });

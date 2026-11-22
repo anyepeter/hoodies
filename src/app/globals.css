@@ -50,6 +50,22 @@ body {
   .ribbon {
     clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 100%, 0 100%, 8px 50%);
   }
+  /* The "MOST VALUE" tag: a band folded over the card's edge, its two ends tucked behind. */
+  .ribbon-fold::before,
+  .ribbon-fold::after {
+    content: "";
+    position: absolute;
+    bottom: -5px;
+    border-top: 5px solid var(--color-brand-dark);
+  }
+  .ribbon-fold::before {
+    left: 0;
+    border-left: 5px solid transparent;
+  }
+  .ribbon-fold::after {
+    right: 0;
+    border-right: 5px solid transparent;
+  }
 }
 
 /* Visible focus for keyboard users only */

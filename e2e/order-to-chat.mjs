@@ -40,10 +40,11 @@ check(true, "home card → the hoodie page with ?style=Shinobi");
 // 2. Hoodie page: Solo, size M → add → cart → checkout.
 await shop.getByRole("radio", { name: /Solo Hoodie/ }).click();
 const pack = shop.locator('[role="radio"][aria-checked="true"]').locator("..");
-const picked = await pack.locator('button[aria-pressed="true"]').filter({ hasText: /^(Akatsuki|Shinobi)/ }).allTextContents();
-check(picked.length === 1 && picked[0].startsWith("Shinobi"), "Shinobi is picked on the hoodie page");
-await pack.getByRole("button", { name: "Size M for hoodie 1" }).click();
-await shop.getByRole("button", { name: /^Add to cart · / }).click();
+check((await pack.getByLabel("Style for hoodie 1").inputValue()) === "Shinobi", "Shinobi is picked on the hoodie page");
+await pack.getByLabel("Size for hoodie 1").selectOption("M");
+// The extras start ticked; this order is the hoodie alone.
+for (const extra of ["Add Mystery Box", "Add Shipping Protection", "Add Priority Shipping"]) await pack.getByText(extra).click();
+await shop.getByRole("button", { name: "Add to cart", exact: true }).first().click();
 const drawer = shop.getByRole("dialog", { name: "Your cart" });
 await drawer.getByText("Shinobi / M").waitFor({ timeout: 10000 });
 check(true, "the cart has Shinobi / M");

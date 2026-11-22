@@ -10,6 +10,7 @@ import { Gallery } from "@/components/product/Gallery";
 import { Perks } from "@/components/product/Perks";
 import { SizeChart } from "@/components/product/SizeChart";
 import { flyToCart } from "@/lib/fly-to-cart";
+import { scriptFont } from "@/lib/fonts";
 import {
   ADD_ONS,
   BUNDLES,
@@ -20,15 +21,12 @@ import {
   STYLES,
   money,
   type AddOnId,
-  type Bundle,
   type BundleId,
   type Size,
   type Style,
 } from "@/lib/store";
 
-type Choice = { style: Style; size: Size | null };
-
-const saving = (b: Bundle) => HOODIE.compareAt * b.qty - b.price;
+type Choice = { style: Style; size: Size };
 
 /** `stock` is the live count per style, read by the page from the database. A sold-out style can't be picked. */
 export function ProductMain({ stock }: { stock: Record<Style, number> }) {
@@ -37,12 +35,11 @@ export function ProductMain({ stock }: { stock: Record<Style, number> }) {
   const [bundleId, setBundleId] = useState<BundleId>("duo");
   const firstInStock = STYLES.find((s) => stock[s] > 0) ?? STYLES[0];
   const soldOut = STYLES.every((s) => stock[s] <= 0);
-  // No size is pre-chosen: the original defaults everyone to S, which is how wrong sizes get ordered.
-  const [choices, setChoices] = useState<Choice[]>(Array.from({ length: 3 }, () => ({ style: firstInStock, size: null })));
+  // Style and size are dropdowns that start on the first style in stock and S, as on the original.
+  const [choices, setChoices] = useState<Choice[]>(Array.from({ length: 3 }, () => ({ style: firstInStock, size: "S" })));
   const [stockError, setStockError] = useState<string | null>(null);
-  // Paid extras start unticked (the original pre-ticks all three; EU consumer law doesn't allow that).
-  const [addOns, setAddOns] = useState<Set<AddOnId>>(new Set());
-  const [missingSize, setMissingSize] = useState(false);
+  // Every extra starts ticked, as on the original: it goes into the order unless the shopper unticks it.
+  const [addOns, setAddOns] = useState<Set<AddOnId>>(() => new Set(ADD_ONS.map((a) => a.id)));
   const [added, setAdded] = useState(false);
   const [showSticky, setShowSticky] = useState(false);
   const buyButton = useRef<HTMLButtonElement>(null);
@@ -94,7 +91,6 @@ export function ProductMain({ stock }: { stock: Record<Style, number> }) {
     setChoices((prev) => prev.map((c, j) => (j === i ? { ...c, ...change } : c)));
     setStockError(null);
     if (change.style) setPhoto(HOODIE.images.findIndex((img) => img.style === change.style));
-    if (change.size) setMissingSize(false);
   };
 
   const toggleAddOn = (id: AddOnId) =>
@@ -107,11 +103,6 @@ export function ProductMain({ stock }: { stock: Record<Style, number> }) {
 
   const addToCart = (from: HTMLElement | null) => {
     if (soldOut) return;
-    if (chosen.some((c) => !c.size)) {
-      setMissingSize(true);
-      picker.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
     // A pack can't hold more of a style than there are left (the server checks again when the order is placed).
     const short = STYLES.find((s) => chosen.filter((c) => c.style === s).length > stock[s]);
     if (short) {
@@ -168,122 +159,127 @@ export function ProductMain({ stock }: { stock: Record<Style, number> }) {
             ))}
           </ul>
 
-          <div className="mt-4 flex items-center gap-3">
-            <div className="flex -space-x-2">
+          <div className="mt-5 flex items-center">
+            <div className="relative z-10 flex -space-x-2.5">
               {RECENT_BUYERS.map((src) => (
-                <Image key={src} src={src} alt="" width={32} height={32} className="h-8 w-8 rounded-full object-cover ring-2 ring-white" />
+                <span key={src} className="relative">
+                  <Image src={src} alt="" width={40} height={40} className="h-10 w-10 rounded-full border-2 border-white object-cover" />
+                  <span className="absolute -left-0.5 -top-0.5 grid h-4 w-4 place-items-center rounded-full bg-brand text-[9px] font-bold text-white ring-2 ring-white" aria-hidden>
+                    ✓
+                  </span>
+                </span>
               ))}
             </div>
-            <p className="text-[13px] text-ink/70">
-              <span className="relative mr-1.5 inline-flex h-2 w-2 align-middle">
-                <span className="absolute inset-0 animate-ping rounded-full bg-brand/60" />
-                <span className="relative h-2 w-2 rounded-full bg-brand" />
-              </span>
-              <b className="font-semibold text-ink">87+ orders</b> in the last 24h
+            <p className="-ml-3 rounded-full bg-brand py-1 pl-6 pr-5 leading-tight tracking-wide text-white">
+              <b className="block text-[14px] font-bold">87+ orders</b>
+              <span className="block text-[11px]">in the last 24h</span>
             </p>
           </div>
 
-          {/* Bundles */}
-          <div className="mt-7 flex items-end justify-between">
-            <h2 className="text-[15px] font-bold">Bundle &amp; save</h2>
+          <div className="mt-5">
             <SizeChart />
           </div>
 
-          <div ref={picker} className="mt-3 space-y-2.5" role="radiogroup" aria-label="Bundle">
+          {/* Bundles, laid out like the original: the open pack holds its style/size pickers and the extras. */}
+          <div className="mt-5 flex items-center gap-3 text-[13px] font-bold tracking-wide text-ink">
+            <span className="h-px flex-1 bg-ink/25" />
+            BUNDLE &amp; SAVE
+            <span className="h-px flex-1 bg-ink/25" />
+          </div>
+
+          <div ref={picker} className="mt-4 space-y-3" role="radiogroup" aria-label="Bundle">
             {BUNDLES.map((b) => {
               const on = b.id === bundleId;
               return (
                 <div
                   key={b.id}
-                  className={`relative rounded-2xl border-2 transition-[border-color,background-color,box-shadow] duration-300 ${
-                    on ? "border-brand bg-brand/[0.03] shadow-[0_10px_30px_-18px_rgba(167,3,23,0.6)]" : "border-black/10 hover:border-black/25"
+                  className={`relative rounded-lg border bg-white transition-[border-color,box-shadow] duration-200 ${
+                    on ? "border-brand ring-1 ring-brand" : "border-black/20 hover:border-black/40"
                   }`}
                 >
-                  {(b.sticker || b.ribbon) && (
-                    <span className={`absolute -top-2.5 right-4 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${b.sticker ? "bg-brand text-white" : "bg-ink text-white"}`}>
-                      {b.sticker ?? "Best value"}
+                  {b.ribbon && (
+                    <span className="ribbon-fold absolute -top-3 right-3 z-10 bg-brand px-2.5 py-1 text-[11px] font-bold leading-none tracking-wide text-white">
+                      {b.ribbon}
                     </span>
                   )}
-                  <button type="button" role="radio" aria-checked={on} onClick={() => setBundleId(b.id)} className="flex w-full items-center gap-3 p-4 text-left">
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition-colors ${on ? "border-brand" : "border-ink/30"}`}>
-                      <span className={`h-2.5 w-2.5 rounded-full bg-brand transition-transform duration-300 ${on ? "scale-100" : "scale-0"}`} />
+                  {b.sticker && (
+                    <span className="pointer-events-none absolute -right-2 -top-6 z-10 select-none" aria-hidden>
+                      <span
+                        className={`${scriptFont.className} block -rotate-[9deg] rounded-[50%] bg-brand px-4 pb-2 pt-1.5 text-center text-[16px] leading-[0.95] text-white shadow-[0_6px_14px_-6px_rgba(167,3,23,0.7)]`}
+                      >
+                        Most
+                        <br />
+                        Popular
+                      </span>
+                      <span className="absolute -right-1 -top-1 text-[9px] text-brand">✦</span>
+                      <span className="absolute -right-1 top-6 text-[7px] text-brand">✦</span>
+                    </span>
+                  )}
+                  <button type="button" role="radio" aria-checked={on} onClick={() => setBundleId(b.id)} className="flex w-full items-center gap-3.5 px-4 py-4 text-left">
+                    <span className={`grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border-2 transition-colors ${on ? "border-brand" : "border-ink/30"}`}>
+                      <span className={`h-3 w-3 rounded-full bg-brand transition-transform duration-200 ${on ? "scale-100" : "scale-0"}`} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[16px] font-bold leading-tight">{b.title}</span>
-                      <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink/60">
-                        <span className="rounded-md bg-brand/10 px-1.5 py-px font-semibold text-brand">Save {money(saving(b))}</span>
-                        {b.qty > 1 && <span className="whitespace-nowrap">{money(b.price / b.qty)} each</span>}
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-[18px] font-bold leading-tight text-ink">{b.title}</span>
+                        <span className="rounded-md bg-brand px-2 py-[5px] text-[10px] font-bold uppercase leading-none tracking-wide text-white">Free shipping</span>
                       </span>
+                      <span className="mt-1 block text-[13px] italic text-ink/70">{b.saving}</span>
                     </span>
-                    <span className="text-right">
-                      <span className="block text-[17px] font-bold leading-tight">{money(b.price)}</span>
-                      <s className="block text-[12px] text-ink/40">{money(HOODIE.compareAt * b.qty)}</s>
-                    </span>
+                    <span className="shrink-0 text-[18px] font-bold text-ink">{money(b.price)}</span>
                   </button>
 
-                  <div inert={!on} className={`grid transition-[grid-template-rows] duration-500 ease-[cubic-bezier(.2,.8,.2,1)] ${on ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                  <div inert={!on} className={`grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] ${on ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
                     <div className="overflow-hidden">
-                      <div className="space-y-4 border-t border-brand/10 px-4 pb-4 pt-3">
-                        {choices.slice(0, b.qty).map((c, i) => (
-                            <fieldset key={i} className="min-w-0 space-y-2">
-                              <legend className="mb-2 text-[12px] font-semibold text-ink/60">
-                                {b.qty > 1 ? `Hoodie ${i + 1}` : "Your hoodie"} · <span className="text-ink">{c.style}</span>
-                                {c.size && <span className="text-ink">, {c.size}</span>}
-                                <span className="ml-1.5 font-bold text-brand">· {stock[c.style] > 0 ? `Only ${stock[c.style]} left` : "Sold out"}</span>
-                              </legend>
-                              <div className="flex gap-2">
+                      <div className="px-4 pb-3">
+                        <p className="text-[12px] text-ink/70">Style, Size</p>
+                        <div className="mt-1.5 space-y-2">
+                          {choices.slice(0, b.qty).map((c, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <Image src={STYLE_IMAGE[c.style]} alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-md border border-black/10 object-cover" />
+                              <select
+                                aria-label={`Style for hoodie ${i + 1}`}
+                                value={c.style}
+                                onChange={(e) => choose(i, { style: e.target.value as Style })}
+                                className="select h-9 cursor-pointer rounded-md border border-black/25 bg-white pl-2.5 pr-7 text-[14px] text-ink"
+                              >
                                 {STYLES.map((s) => (
-                                  <button
-                                    key={s}
-                                    type="button"
-                                    aria-pressed={c.style === s}
-                                    disabled={stock[s] <= 0}
-                                    onClick={() => choose(i, { style: s })}
-                                    className={`flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${
-                                      c.style === s ? "border-ink bg-ink text-white" : "border-black/15 hover:border-black/40 disabled:hover:border-black/15"
-                                    }`}
-                                  >
-                                    <Image src={STYLE_IMAGE[s]} alt="" width={28} height={28} className={`h-7 w-7 rounded-full object-cover ${stock[s] <= 0 ? "grayscale" : ""}`} />
-                                    {s}
-                                    <span className={`text-[11px] font-semibold ${c.style === s ? "text-white/70" : stock[s] <= 0 ? "text-ink/60" : "text-brand"}`}>
-                                      {stock[s] > 0 ? `${stock[s]} left` : "Sold out"}
-                                    </span>
-                                  </button>
+                                  <option key={s} value={s} disabled={stock[s] <= 0}>
+                                    {stock[s] <= 0 ? `${s} (sold out)` : s}
+                                  </option>
                                 ))}
-                              </div>
-                              <div className="grid grid-cols-5 gap-1.5">
+                              </select>
+                              <select
+                                aria-label={`Size for hoodie ${i + 1}`}
+                                value={c.size}
+                                onChange={(e) => choose(i, { size: e.target.value as Size })}
+                                className="select h-9 cursor-pointer rounded-md border border-black/25 bg-white pl-2.5 pr-7 text-[14px] text-ink"
+                              >
                                 {SIZES.map((s) => (
-                                  <button
-                                    key={s}
-                                    type="button"
-                                    aria-pressed={c.size === s}
-                                    aria-label={`Size ${s} for hoodie ${i + 1}`}
-                                    onClick={() => choose(i, { size: s })}
-                                    className={`h-10 rounded-xl border text-[13px] font-semibold transition active:scale-95 ${
-                                      c.size === s
-                                        ? "border-brand bg-brand text-white"
-                                        : missingSize && !c.size
-                                          ? "border-brand/50 bg-white text-ink"
-                                          : "border-black/15 bg-white hover:border-black/40"
-                                    }`}
-                                  >
-                                    {s}
-                                  </button>
+                                  <option key={s}>{s}</option>
                                 ))}
-                              </div>
-                            </fieldset>
+                              </select>
+                            </div>
                           ))}
-                        {missingSize && on && (
-                          <p className="text-[13px] font-semibold text-brand" role="alert">
-                            Pick a size for {bundle.qty > 1 ? "each hoodie" : "your hoodie"} first.
-                          </p>
-                        )}
+                        </div>
                         {stockError && on && (
-                          <p className="text-[13px] font-semibold text-brand" role="alert">
+                          <p className="mt-2 text-[13px] font-semibold text-brand" role="alert">
                             {stockError}
                           </p>
                         )}
                       </div>
+                      <ul className="divide-y divide-white/60 rounded-b-[7px] bg-brand/20">
+                        {ADD_ONS.map((a) => (
+                          <li key={a.id}>
+                            <label className="flex cursor-pointer items-center gap-3 px-2.5 py-2">
+                              <input type="checkbox" checked={addOns.has(a.id)} onChange={() => toggleAddOn(a.id)} className="check" />
+                              <Image src={a.image} alt="" width={30} height={30} className="h-[30px] w-[30px] rounded bg-white object-contain p-0.5" />
+                              <span className="flex-1 text-[13px] font-bold text-ink">{a.label}</span>
+                              <span className="text-[13px] font-bold text-ink">{money(a.price)}</span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   </div>
                 </div>
@@ -291,46 +287,14 @@ export function ProductMain({ stock }: { stock: Record<Style, number> }) {
             })}
           </div>
 
-          {/* Opt-in extras */}
-          <fieldset className="mt-5 min-w-0">
-            <legend className="text-[13px] font-bold">Add to your order</legend>
-            <div className="mt-2 grid grid-cols-1 gap-2">
-              {ADD_ONS.map((a) => {
-                const on = addOns.has(a.id);
-                return (
-                  <label
-                    key={a.id}
-                    className={`flex cursor-pointer items-center gap-3 rounded-xl border p-2.5 pr-3 transition ${on ? "border-brand bg-brand/[0.04]" : "border-black/10 hover:border-black/25"}`}
-                  >
-                    <input type="checkbox" checked={on} onChange={() => toggleAddOn(a.id)} className="check" />
-                    <Image src={a.image} alt="" width={36} height={36} className="h-9 w-9 rounded-lg bg-soft object-contain p-1" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13px] font-semibold">{a.title}</span>
-                      <span className="block truncate text-[11px] text-ink/55">{a.description}</span>
-                    </span>
-                    <span className="text-[13px] font-semibold">+{money(a.price)}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-
           <button
             ref={buyButton}
             type="button"
             disabled={soldOut}
             onClick={(e) => addToCart(e.currentTarget)}
-            className="btn-brand group relative mt-5 h-14 w-full overflow-hidden rounded-2xl text-[16px] shadow-[0_14px_30px_-14px_rgba(167,3,23,0.8)] disabled:cursor-not-allowed disabled:bg-ink/30 disabled:shadow-none disabled:active:scale-100"
+            className="btn-brand group relative mt-5 h-[54px] w-full overflow-hidden rounded-md text-[18px] uppercase tracking-wide disabled:cursor-not-allowed disabled:bg-ink/30 disabled:active:scale-100"
           >
-            <span className={`flex items-center gap-2 transition-all duration-300 ${added ? "-translate-y-8 opacity-0" : ""}`}>
-              {soldOut ? (
-                "Sold out"
-              ) : (
-                <>
-                  Add to cart <span className="opacity-60">·</span> {money(total)}
-                </>
-              )}
-            </span>
+            <span className={`transition-all duration-300 ${added ? "-translate-y-8 opacity-0" : ""}`}>{soldOut ? "Sold out" : "Add to cart"}</span>
             <span className={`absolute inset-0 grid place-items-center transition-all duration-300 ${added ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`} aria-hidden={!added}>
               Added to your cart ✓
             </span>

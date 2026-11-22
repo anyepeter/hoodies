@@ -36,8 +36,8 @@ const check = (ok, label) => {
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(900); // the picker is set after mount, then scrolled into view
   const open = page.locator('[role="radio"][aria-checked="true"]').locator("..");
-  const picked = await open.locator('button[aria-pressed="true"]').filter({ hasText: /^(Akatsuki|Shinobi)/ }).allTextContents();
-  check(picked.length === 2 && picked.every((t) => t.startsWith("Shinobi")), `both hoodies of the Duo pack are Shinobi (${picked.map((t) => t.split(/\d/)[0]).join(", ")})`);
+  const picked = await open.locator('select[aria-label^="Style for hoodie"]').evaluateAll((s) => s.map((x) => x.value));
+  check(picked.length === 2 && picked.every((t) => t === "Shinobi"), `both hoodies of the Duo pack are Shinobi (${picked.join(", ")})`);
   const inView = await page.evaluate(() => {
     const r = document.querySelector('[role="radiogroup"][aria-label="Bundle"]').getBoundingClientRect();
     return window.scrollY > 200 && r.top < window.innerHeight && r.bottom > 0;
@@ -46,9 +46,9 @@ const check = (ok, label) => {
   await page.screenshot({ path: `${out}/home-card-to-hoodie-page.png` });
 
   // Pick sizes and add: the cart gets two Shinobi.
-  await open.getByRole("button", { name: "Size M for hoodie 1" }).click();
-  await open.getByRole("button", { name: "Size L for hoodie 2" }).click();
-  await page.getByRole("button", { name: /^Add to cart · / }).click();
+  await open.getByLabel("Size for hoodie 1").selectOption("M");
+  await open.getByLabel("Size for hoodie 2").selectOption("L");
+  await page.getByRole("button", { name: "Add to cart", exact: true }).first().click();
   await page.waitForTimeout(1300);
   const drawer = page.getByRole("dialog", { name: "Your cart" });
   check(await drawer.getByText("Shinobi / M, Shinobi / L").isVisible(), "adding puts Shinobi / M, Shinobi / L in the cart");
@@ -57,8 +57,8 @@ const check = (ok, label) => {
   // A style that isn't sold, or no ?style=: the usual default (Akatsuki).
   await page.goto(`${base}/products/akatsukizipup-mask-hoodie?style=Hokage`, { waitUntil: "networkidle" });
   await page.waitForTimeout(500);
-  const def = await page.locator('[role="radio"][aria-checked="true"]').locator("..").locator('button[aria-pressed="true"]').filter({ hasText: /^(Akatsuki|Shinobi)/ }).allTextContents();
-  check(def.length === 2 && def.every((t) => t.startsWith("Akatsuki")), "an unknown ?style= is ignored (Akatsuki stays picked)");
+  const def = await page.locator('[role="radio"][aria-checked="true"]').locator("..").locator('select[aria-label^="Style for hoodie"]').evaluateAll((s) => s.map((x) => x.value));
+  check(def.length === 2 && def.every((t) => t === "Akatsuki"), "an unknown ?style= is ignored (Akatsuki stays picked)");
   check(errors.length === 0, `no page errors on home or the hoodie page${errors.length ? `: ${errors.join(" | ")}` : ""}`);
   await page.close();
 }
@@ -72,8 +72,8 @@ const check = (ok, label) => {
   check(text.includes("22 Nov") && text.includes("Ordered"), "ordered: 22 Nov");
   check(text.includes("23 Nov - 24 Nov"), "ready to ship: 23 Nov - 24 Nov");
   check(text.includes("27 Nov - 29 Nov"), "delivered: 27 Nov - 29 Nov");
-  check(text.includes("Only 20 left"), "hoodie page shows Only 20 left for Akatsuki");
-  check(text.includes("35 left"), "hoodie page shows 35 left for Shinobi");
+  const options = await page.locator('[role="radio"][aria-checked="true"]').locator("..").locator('select[aria-label="Style for hoodie 1"] option').evaluateAll((os) => os.map((o) => `${o.value}:${o.disabled}`).join());
+  check(options === "Akatsuki:false,Shinobi:false", `both styles can be picked while in stock (${options})`);
   await page.close();
 }
 
