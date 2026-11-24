@@ -15,9 +15,6 @@ export const metadata: Metadata = {
   title: { default: "AkatsukiZipUp: the Akatsuki Mask Hoodie", template: "%s – AkatsukiZipUp" },
   description: "The zip-up hoodie with the red clouds and a built-in mask. Akatsuki or Shinobi, S to 2XL. Free worldwide shipping.",
   openGraph: { siteName: "AkatsukiZipUp", type: "website", images: [{ url: "/store/akatsuki-front.webp", width: 1600, height: 1600 }] },
-  // A copy of akatsukizipup.com, which is still live on Shopify: kept out of search results until it has
-  // its own brand or the akatsukizipup.com owner verifies the move.
-  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {
