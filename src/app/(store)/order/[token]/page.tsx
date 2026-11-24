@@ -96,13 +96,13 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
                 <OpenChatButton className="mt-5 w-full sm:w-auto" />
               ) : (
                 <p className="mt-4 rounded-2xl bg-white/10 px-4 py-3 text-[14px] leading-relaxed text-white/80">
-                  Your chat is on the device you ordered from: open this page there to see it. Or write to info@akatsukizipup.com and quote {number}.
+                  Your chat is on the device you ordered from: open this page there to see it. Or write to info@uniquescornerr.com and quote {number}.
                 </p>
               )}
             </>
           ) : (
             <p className="mt-2 text-[15px] leading-relaxed text-white/80">
-              We&apos;ll send you the details to pay {money(total)} with {order.paymentMethod}. Questions? Write to info@akatsukizipup.com and quote {number}.
+              We&apos;ll send you the details to pay {money(total)} with {order.paymentMethod}. Questions? Write to info@uniquescornerr.com and quote {number}.
             </p>
           )}
           <p className="mt-5 flex items-center gap-2 text-[13px] text-white/60">
@@ -117,7 +117,7 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
           {order.status === "SHIPPED" && <>Your order shipped{order.shippedAt ? ` on ${day(order.shippedAt)}` : ""}. It usually arrives within 5–7 days.</>}
           {order.status === "DELIVERED" && <>Delivered{order.deliveredAt ? ` on ${day(order.deliveredAt)}` : ""}. Enjoy the hoodie!</>}
           {order.status === "CANCELLED" && <>This order was cancelled{order.cancelledAt ? ` on ${day(order.cancelledAt)}` : ""}. There&apos;s nothing to pay.</>}
-          {order.status === "REFUNDED" && <>This order was refunded. If you have questions, reply to us at info@akatsukizipup.com.</>}
+          {order.status === "REFUNDED" && <>This order was refunded. If you have questions, reply to us at info@uniquescornerr.com.</>}
         </p>
       )}
 

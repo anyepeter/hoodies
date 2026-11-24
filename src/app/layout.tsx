@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
+import { SITE_URL } from "@/lib/store";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -10,12 +11,12 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://hoodies-psi.vercel.app"),
+  metadataBase: new URL(SITE_URL),
   title: { default: "AkatsukiZipUp: the Akatsuki Mask Hoodie", template: "%s – AkatsukiZipUp" },
   description: "The zip-up hoodie with the red clouds and a built-in mask. Akatsuki or Shinobi, S to 2XL. Free worldwide shipping.",
   openGraph: { siteName: "AkatsukiZipUp", type: "website", images: [{ url: "/store/akatsuki-front.webp", width: 1600, height: 1600 }] },
-  // A design preview of someone else's live store: keep it out of search results so it never competes
-  // with (or passes for) the real one.
+  // A copy of akatsukizipup.com, which is still live on Shopify: kept out of search results until it has
+  // its own brand or the akatsukizipup.com owner verifies the move.
   robots: { index: false, follow: false },
 };
 

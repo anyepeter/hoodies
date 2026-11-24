@@ -11,6 +11,17 @@ const nextConfig: NextConfig = {
   // Separate build folders let several dev servers run side by side (NEXT_DIST_DIR=.next-a next dev -p 3211).
   distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
+  // One address for search engines: www sends people (and crawlers) to the bare domain.
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.uniquescornerr.com" }],
+        destination: "https://uniquescornerr.com/:path*",
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       { source: "/:path*", headers: [...securityHeaders, { key: "X-Frame-Options", value: "SAMEORIGIN" }] },

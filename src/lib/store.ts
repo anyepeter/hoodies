@@ -2,6 +2,8 @@
 // Copied from akatsukizipup.com (21 Nov 2026) so the clone reads exactly like the original.
 
 export const STORE_NAME = "AkatsukiZipUp";
+// The store's public address: canonical links, the sitemap and robots.txt all use it.
+export const SITE_URL = "https://uniquescornerr.com";
 
 /* The original store prices in euros. Prices here are those euro figures converted to US dollars at the
    European Central Bank reference rate of 20 Nov 2026 (1 EUR = 1.099 USD). To re-price, change the rate. */

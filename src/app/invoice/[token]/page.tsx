@@ -54,7 +54,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ token:
           <div>
             <Image src="/store/logo.jpg" alt={STORE_NAME} width={1600} height={719} className="h-10 w-auto" priority />
             <p className="mt-3 text-[13px] leading-relaxed text-ink/70">
-              <b className="text-ink">{STORE_NAME}</b> · info@akatsukizipup.com
+              <b className="text-ink">{STORE_NAME}</b> · info@uniquescornerr.com
             </p>
           </div>
           <div className="sm:text-right">
@@ -201,7 +201,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ token:
         </section>
 
         <footer className="mt-8 border-t border-black/10 pt-4 text-[12px] leading-relaxed text-ink/55">
-          <p>Thank you for your order. Questions? Write to info@akatsukizipup.com and quote {number}.</p>
+          <p>Thank you for your order. Questions? Write to info@uniquescornerr.com and quote {number}.</p>
           <p className="mt-1">This store is a design preview: your order is recorded but nothing is charged or shipped.</p>
         </footer>
       </article>

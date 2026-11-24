@@ -283,7 +283,7 @@ try {
   check(invoiceText.includes("Cryptocurrency discount (10%)−$13.00"), "invoice shows the crypto discount");
   check((await page.locator('[data-payment-logo="crypto"]').count()) === 1 && invoiceText.includes("Cryptocurrency"), "invoice shows the payment method with its logo");
   check(invoiceText.includes("Payment details are sent to you in the chat.") && !invoiceText.includes(rail.crypto.details), "invoice: payment details come in the chat (no wallet here)");
-  check(invoiceText.includes("info@akatsukizipup.com") && invoiceText.includes("Ada Lovelace"), "invoice has the seller and the customer");
+  check(invoiceText.includes("info@uniquescornerr.com") && invoiceText.includes("Ada Lovelace"), "invoice has the seller and the customer");
   check(await page.getByRole("button", { name: "Print / Save as PDF" }).isVisible(), "invoice has a print button");
   check((await page.locator("#cart-icon").count()) === 0, "invoice has no store chrome");
   await page.screenshot({ path: `${out}/invoice.png`, fullPage: true });

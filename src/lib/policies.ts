@@ -171,7 +171,7 @@ If you have any questions regarding these Terms, please contact us using the con
     body: `## Contact Us
 We're here to help! If you have any questions about your order, our products, shipping, returns, or anything else, please don't hesitate to get in touch.
 ## Customer Support
-Email: info@akatsukizipup.com
+Email: info@uniquescornerr.com
 Business Hours: Monday – Friday: 9:00 AM – 5:00 PM
 We aim to respond to all inquiries within 1–2 business days.
 ## Order Support
@@ -182,7 +182,7 @@ To help us assist you as quickly as possible, please include:
 ## Returns
 If you are requesting a return or refund, please contact us before sending any items back. We will provide return instructions and the appropriate return address.
 ## General Inquiries
-For partnership opportunities, wholesale inquiries, or other business-related questions, please email us at info@mycuddlepouch.com.`,
+For partnership opportunities, wholesale inquiries, or other business-related questions, please email us at info@uniquescornerr.com.`,
   },
   {
     slug: "privacy-policy",
@@ -249,7 +249,7 @@ If we transfer your personal information out of the European Economic Area or th
 ## Changes to This Privacy Policy
 We may update this Privacy Policy from time to time, including to reflect changes to our practices or for other operational, legal, or regulatory reasons. We will post the revised Privacy Policy on this website, update the "Last updated" date and provide notice as required by applicable law.
 ## Contact
-Should you have any questions about our privacy practices or this Privacy Policy, or if you would like to exercise any of the rights available to you, please email us at info@akatsukizipup.com. You can find our other contact details on our contact information policy. For the purpose of applicable data protection laws, we are the data controller of your personal information.`,
+Should you have any questions about our privacy practices or this Privacy Policy, or if you would like to exercise any of the rights available to you, please email us at info@uniquescornerr.com. You can find our other contact details on our contact information policy. For the purpose of applicable data protection laws, we are the data controller of your personal information.`,
   },
 ];
 
